@@ -1,12 +1,12 @@
 package main
 
 import (
-	"fmt"
+	"encoding/json"
 	"github.com/gin-gonic/gin"
-	"github.com/go-redis/redis/v8"
 	"github.com/gorilla/websocket"
 	"log"
 	"net/http"
+	"strings"
 	"test/redis"
 	"test/stock"
 	"time"
@@ -31,45 +31,78 @@ func detail(c *gin.Context) {
 	if err != nil {
 		log.Println("读取数据失败，", err)
 	}
-	// 获取代码
+	// 获取代码并初始化
 	code := string(msg)
-	// 初始化
-	vol, err := test.GetVol(code)
-	if err != nil {
-		// 写入错误信息
-		if err == redis.Nil {
-			err = ws.WriteMessage(mt, []byte("该代码不存在！"))
-		} else {
-			err = ws.WriteMessage(mt, []byte(err.Error()))
-			return
-		}
+	codes := []string{code}
+	volMap := test.GetVolMaps(codes)
+	if len(volMap) == 0 {
+		_ = ws.WriteMessage(mt, []byte("该代码不存在！代码示例：600519.SH"))
+		return
 	}
 	//写入ws数据
-	err = ws.WriteMessage(mt, stock.GetDetail(code))
-	if err != nil {
-		fmt.Println("写入数据失败，", err)
-	}
-	for {
+	_ = ws.WriteMessage(mt, stock.GetDetail(code))
+
+	// 若正在交易则保持连接
+	for 9 <= time.Now().Hour() && time.Now().Hour() < 15 {
+		newVolMap := test.GetVolMaps(codes)
 		// 检查是否需要更新
-		nowVol, _ := test.GetVol(code)
-		if vol == nowVol {
-			fmt.Println("无需更新！")
-			// 1s间隔
-			time.Sleep(time.Millisecond * 1000)
+		if volMap[code] == newVolMap[code] {
+			// 0.1s间隔
+			time.Sleep(time.Millisecond * 100)
 			continue
 		}
-		vol = nowVol
+		volMap = newVolMap
 		//写入ws数据
-		err = ws.WriteMessage(mt, stock.GetDetail(code))
-		if err != nil {
-			fmt.Println("写入数据失败，", err)
-			break
+		_ = ws.WriteMessage(mt, stock.GetDetail(code))
+	}
+}
+
+func simple(c *gin.Context) {
+	//升级get请求为webSocket协议
+	ws, err := upGrader.Upgrade(c.Writer, c.Request, nil)
+	if err != nil {
+		log.Println("升级协议失败，", err)
+	}
+	defer ws.Close()
+
+	//读取客户端发送的数据
+	mt, msg, err := ws.ReadMessage()
+	if err != nil {
+		log.Println("读取数据失败，", err)
+	}
+	// 根据逗号切片
+	codes := strings.Split(string(msg), ",")
+	// 初始化
+	volMaps := test.GetVolMaps(codes)
+	//写入数据
+	jsonData, _ := json.Marshal(test.GetSimpleStock(codes))
+	_ = ws.WriteMessage(mt, jsonData)
+	// 若正在交易则保持连接
+	for 9 <= time.Now().Hour() && time.Now().Hour() < 15 {
+		newVolMaps := test.GetVolMaps(codes)
+		// 检查是否有键值更新
+		for i := range volMaps {
+			code := volMaps[i]
+			// 有更新
+			if volMaps[code] != newVolMaps[code] {
+				volMaps = newVolMaps
+				//写入ws数据
+				jsonData, _ := json.Marshal(test.GetSimpleStock(codes))
+				_ = ws.WriteMessage(mt, jsonData)
+				break
+			}
 		}
+		// 0.1s
+		time.Sleep(time.Millisecond * 100)
 	}
 }
 
 func main() {
 	r := gin.Default()
 	r.GET("/detail", detail)
-	r.Run("localhost:8080")
+	r.GET("/simple", simple)
+	err := r.Run("localhost:8080")
+	if err != nil {
+		panic(err)
+	}
 }

@@ -2,7 +2,6 @@ package test
 
 import (
 	"context"
-	"fmt"
 	"github.com/go-redis/redis/v8"
 	"log"
 )
@@ -17,7 +16,7 @@ var rdb = redis.NewClient(&redis.Options{
 	DB:       0,
 })
 
-func GetDetailStock(code string) map[string]string { // 获取股票信息
+func GetDetailStock(code string) map[string]string { // 获取单只股票信息
 	val, err := rdb.HGetAll(ctx, code).Result()
 	//异常处理
 	if err == redis.Nil {
@@ -28,44 +27,38 @@ func GetDetailStock(code string) map[string]string { // 获取股票信息
 	return val
 }
 
-func GetSimpleStock(code string) map[string]interface{} { // 获取简略信息
-	// 返回值为 []interface{}
-	val, err := rdb.HMGet(ctx, code, "code", "name", "price", "pct_chg").Result()
-	//异常处理
-	if err == redis.Nil {
-		log.Println(code, "does not exist")
-	} else if err != nil {
-		panic(err)
-	}
-	temp := map[string]interface{}{"code": val[0], "name": val[1], "price": val[2], "pct_chg": val[3]}
-	fmt.Println(temp)
-	fmt.Println("返回结果：", temp)
-	return temp
-}
+func GetSimpleStock(codes []string) []map[string]interface{} { // 获取多只简略信息
+	result := make([]map[string]interface{}, 0)
 
-// 输入输出都为[]map，key为代码，value为成交量，当value不同时返回该key &value
-
-func CheckUpdate(data map[string]float32) map[string]float32 {
-	result := make(map[string]float32, len(data))
-	// 迭代map中的key
-	for code := range data {
-		vol, err := rdb.HMGet(ctx, code, "vol").Result()
+	for i := range codes {
+		code := codes[i]
+		// 返回值为 []interface{}
+		val, err := rdb.HMGet(ctx, code, "code", "name", "price", "pct_chg").Result()
+		//异常处理
 		if err == redis.Nil {
-			log.Println(code, "does not exist")
+			continue
 		} else if err != nil {
 			panic(err)
 		}
-		result = map[string]float32{"code": vol[0].(float32)}
+		result = append(result, map[string]interface{}{
+			"code": val[0].(string), "name": val[1].(string), "price": val[2].(string), "pct_chg": val[3].(string),
+		})
 	}
 	return result
 }
 
-func GetVol(code string) (string, error) { //获取股票成交量
-	vol, err := rdb.HGet(ctx, code, "vol").Result()
-	if err == redis.Nil {
-		return "", err
-	} else if err != nil {
-		return "", err
+func GetVolMaps(codes []string) map[string]string { //获取成交量字典
+	result := map[string]string{}
+
+	for i := range codes {
+		code := codes[i]
+		vol, err := rdb.HGet(ctx, code, "vol").Result()
+		if err == redis.Nil {
+			continue
+		} else if err != nil {
+			panic(err)
+		}
+		result[code] = vol
 	}
-	return vol, nil
+	return result
 }
