@@ -4,40 +4,33 @@ import (
 	"encoding/json"
 	"io/ioutil"
 	"net/http"
+	test "test/redis"
 )
 
-// 东财json
+const (
+	URL = "https://push2ex.eastmoney.com/getStockFenShi?ut=7eea3edcaed734bea9cbfc24409ed989&dpt=wzfscj&pageindex=0&sort=1&ft=1"
+)
 
-type SourceData struct {
+type SourceData struct { // 东财json
 	Data struct {
 		Data []struct {
-			Time    int     `json:"t"`
-			Price   float32 `json:"p"`
-			Vol     float32 `json:"v"`
-			Amount  float32
-			Type    int `json:"bs"`
-			Zhudong float32
+			Time            int     `json:"t"`
+			Price           float32 `json:"p"`
+			Vol             float32 `json:"v"`
+			Type            int     `json:"bs"`
+			Amount, Zhudong float32
 		} `json:"data"`
 	} `json:"data"`
 }
 
-// 返回json
-
-type MyData struct {
-	Time    int
-	Price   float32
-	Vol     float32
-	Avg     float32
-	Zhudong float32
-}
-
-// 获取股票详情接口
-
-func GetDetail() []byte {
-	// 数据来源 东方财富网
-	url1 := "https://push2ex.eastmoney.com/getStockFenShi?ut=7eea3edcaed734bea9cbfc24409ed989&dpt=wzfscj"
-	url2 := "&pageindex=0&sort=1&ft=1&code=002714&market=0"
-	res, err := http.Get(url1 + url2)
+func GetDetail(code string) []byte { // 获取股票详情接口
+	//最后一位
+	var market = "1"
+	if code[len(code)-1] == 'Z' {
+		market = "0"
+	}
+	url := URL + "&code=" + code[0:6] + "&market=" + market
+	res, err := http.Get(url)
 	// 捕获异常
 	if err != nil {
 		panic(err)
@@ -50,10 +43,21 @@ func GetDetail() []byte {
 	info := &SourceData{}
 	err = json.Unmarshal(body, info)
 
+	//实时分笔数据（12条）
+	fenbi := make([]map[string]interface{}, 12)
+	length := len(info.Data.Data)
+
+	for i := range fenbi {
+		p := &info.Data.Data[length-12+i]
+		fenbi[i] = map[string]interface{}{"time": p.Time, "price": p.Price / 1000, "vol": p.Vol, "type": p.Type}
+	}
+
+	allLength := 0
 	// 数据处理
-	for i := range info.Data.Data {
+	for i := 1; i < len(info.Data.Data); i++ {
 		// 定义指针
 		p := &info.Data.Data[i]
+		pLast := &info.Data.Data[i-1]
 
 		p.Price /= 1000
 		p.Time /= 100
@@ -65,22 +69,30 @@ func GetDetail() []byte {
 		} else if p.Type == 4 {
 			p.Zhudong *= 0 // 中性盘 * 0
 		}
-
-		if i >= 1 {
-			//上条数据的指针
-			pLast := &info.Data.Data[i-1]
-			//主动资金累加
-			p.Zhudong += pLast.Zhudong
-			//分钟内成交量累加
-			if pLast.Time == p.Time {
-				p.Vol += pLast.Vol
-				p.Amount += pLast.Amount
-			}
+		//主动资金累加
+		p.Zhudong += pLast.Zhudong
+		//分钟内成交量累加
+		if pLast.Time == p.Time {
+			p.Vol += pLast.Vol
+			p.Amount += pLast.Amount
+		}
+		if p.Time <= 930 {
+			continue
+		}
+		// 计算最终数组长度
+		if p.Time != pLast.Time {
+			allLength++
 		}
 	}
-
-	mySlice := make([]MyData, 0, 0)
+	allLength++
+	// 创建数组
+	times := make([]int, allLength)
+	price := make([]float32, allLength)
+	vol := make([]float32, allLength)
+	avg := make([]float32, allLength)
+	zhudong := make([]float32, allLength)
 	//添加数据
+	index := 0
 	for i := 1; i < len(info.Data.Data); i++ {
 		// 定义指针
 		p := &info.Data.Data[i]
@@ -88,18 +100,34 @@ func GetDetail() []byte {
 		if p.Time <= 930 {
 			continue
 		}
-
+		// 添加分钟内最后一条数据
 		if p.Time != pLast.Time {
-			mySlice = append(mySlice, MyData{
-				Time: pLast.Time, Vol: pLast.Vol, Price: pLast.Price,
-				Zhudong: pLast.Zhudong, Avg: pLast.Amount / pLast.Vol,
-			})
+			times[index] = pLast.Time
+			price[index] = pLast.Price
+			vol[index] = pLast.Vol
+			avg[index] = pLast.Amount / pLast.Vol
+			zhudong[index] = pLast.Zhudong
+			index++
 		}
 	}
 	//添加最后一条数据
-	p := &info.Data.Data[len(info.Data.Data)-1]
-	mySlice = append(mySlice, MyData{Time: p.Time, Vol: p.Vol, Price: p.Price, Zhudong: p.Zhudong, Avg: p.Amount / p.Vol})
+	temp := len(info.Data.Data) - 1
+	p := &info.Data.Data[temp]
+	times[index] = p.Time
+	price[index] = p.Price
+	vol[index] = p.Vol
+	avg[index] = p.Amount / p.Vol
+	zhudong[index] = p.Zhudong
+
+	// 字典类型
+	mapData := map[string]interface{}{
+		"chart": map[string]interface{}{
+			"times": times, "price": price, "vol": vol, "avg": avg, "zhhudong": zhudong,
+		},
+		"fenbi": fenbi,
+		"items": test.GetDetailStock(code),
+	}
 	// 转换成json格式
-	jsonData, err := json.Marshal(mySlice)
+	jsonData, _ := json.Marshal(mapData)
 	return jsonData
 }
