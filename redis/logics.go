@@ -4,19 +4,20 @@ import (
 	"context"
 	"github.com/go-redis/redis/v8"
 	"log"
+	"strconv"
 )
 
 var ctx = context.Background()
 
 // redis数据库
-// 实时监听stock
 var rdb = redis.NewClient(&redis.Options{
 	Addr:     "localhost:6379",
 	Password: "",
 	DB:       0,
 })
 
-func GetDetailStock(code string) map[string]string { // 获取单只股票信息
+func GetDetailStock(code string) map[string]interface{} { // 获取单只股票信息
+	resultMap := map[string]interface{}{}
 	val, err := rdb.HGetAll(ctx, code).Result()
 	//异常处理
 	if err == redis.Nil {
@@ -24,10 +25,20 @@ func GetDetailStock(code string) map[string]string { // 获取单只股票信息
 	} else if err != nil {
 		panic(err)
 	}
-	return val
+	// 数据类型转换
+	for i := range val {
+		res, err := strconv.ParseFloat(val[i], 2)
+		if err != nil {
+			// 不可转换
+			resultMap[i] = val[i]
+			continue
+		}
+		resultMap[i] = res
+	}
+	return resultMap
 }
 
-func GetSimpleStock(codes []string) []map[string]interface{} { // 获取多只简略信息
+func GetSimpleStock(codes []string) interface{} { // 获取多只简略信息
 	result := make([]map[string]interface{}, 0)
 
 	for i := range codes {

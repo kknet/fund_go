@@ -1,7 +1,6 @@
 package main
 
 import (
-	"encoding/json"
 	"github.com/gin-gonic/gin"
 	"github.com/gorilla/websocket"
 	"log"
@@ -10,6 +9,10 @@ import (
 	"test/redis"
 	"test/stock"
 	"time"
+)
+
+const (
+	OVERTIME = time.Second * 3 // 连接超时
 )
 
 var upGrader = websocket.Upgrader{
@@ -26,34 +29,36 @@ func detail(c *gin.Context) {
 	}
 	defer ws.Close()
 
+	//设置超时
+	err = ws.SetReadDeadline(time.Now().Add(OVERTIME))
 	//读取客户端发送的数据
 	mt, msg, err := ws.ReadMessage()
 	if err != nil {
 		log.Println("读取数据失败，", err)
+		return
 	}
 	// 获取代码并初始化
 	code := string(msg)
-	codes := []string{code}
-	volMap := test.GetVolMaps(codes)
+	volMap := test.GetVolMaps([]string{code})
 	if len(volMap) == 0 {
 		_ = ws.WriteMessage(mt, []byte("该代码不存在！代码示例：600519.SH"))
 		return
 	}
 	//写入ws数据
-	_ = ws.WriteMessage(mt, stock.GetDetail(code))
+	_ = ws.WriteJSON(stock.GetDetail(code))
 
 	// 若正在交易则保持连接
 	for 9 <= time.Now().Hour() && time.Now().Hour() < 15 {
-		newVolMap := test.GetVolMaps(codes)
-		// 检查是否需要更新
-		if volMap[code] == newVolMap[code] {
-			// 0.1s间隔
-			time.Sleep(time.Millisecond * 100)
-			continue
+		// 0.1s间隔
+		time.Sleep(time.Millisecond * 100)
+
+		newVolMap := test.GetVolMaps([]string{code})
+		// 有更新
+		if volMap[code] != newVolMap[code] {
+			volMap = newVolMap
+			//写入ws数据
+			_ = ws.WriteJSON(stock.GetDetail(code))
 		}
-		volMap = newVolMap
-		//写入ws数据
-		_ = ws.WriteMessage(mt, stock.GetDetail(code))
 	}
 }
 
@@ -65,20 +70,25 @@ func simple(c *gin.Context) {
 	}
 	defer ws.Close()
 
+	//设置超时
+	err = ws.SetReadDeadline(time.Now().Add(OVERTIME))
 	//读取客户端发送的数据
-	mt, msg, err := ws.ReadMessage()
+	_, msg, err := ws.ReadMessage()
 	if err != nil {
 		log.Println("读取数据失败，", err)
+		return
 	}
 	// 根据逗号切片
 	codes := strings.Split(string(msg), ",")
 	// 初始化
 	volMaps := test.GetVolMaps(codes)
-	//写入数据
-	jsonData, _ := json.Marshal(test.GetSimpleStock(codes))
-	_ = ws.WriteMessage(mt, jsonData)
+	//写入ws数据
+	_ = ws.WriteJSON(test.GetSimpleStock(codes))
 	// 若正在交易则保持连接
 	for 9 <= time.Now().Hour() && time.Now().Hour() < 15 {
+		// 0.1s
+		time.Sleep(time.Millisecond * 100)
+
 		newVolMaps := test.GetVolMaps(codes)
 		// 检查是否有键值更新
 		for i := range volMaps {
@@ -87,20 +97,17 @@ func simple(c *gin.Context) {
 			if volMaps[code] != newVolMaps[code] {
 				volMaps = newVolMaps
 				//写入ws数据
-				jsonData, _ := json.Marshal(test.GetSimpleStock(codes))
-				_ = ws.WriteMessage(mt, jsonData)
+				_ = ws.WriteJSON(test.GetSimpleStock(codes))
 				break
 			}
 		}
-		// 0.1s
-		time.Sleep(time.Millisecond * 100)
 	}
 }
 
 func main() {
 	r := gin.Default()
-	r.GET("/detail", detail)
-	r.GET("/simple", simple)
+	r.GET("/stock/detail", detail)
+	r.GET("/stock/simple", simple)
 	err := r.Run("localhost:8080")
 	if err != nil {
 		panic(err)

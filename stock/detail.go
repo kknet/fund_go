@@ -23,7 +23,7 @@ type SourceData struct { // 东财json
 	} `json:"data"`
 }
 
-func GetDetail(code string) []byte { // 获取股票详情接口
+func GetDetail(code string) interface{} { // 获取股票详情接口
 	//最后一位
 	var market = "1"
 	if code[len(code)-1] == 'Z' {
@@ -122,12 +122,10 @@ func GetDetail(code string) []byte { // 获取股票详情接口
 	// 字典类型
 	mapData := map[string]interface{}{
 		"chart": map[string]interface{}{
-			"times": times, "price": price, "vol": vol, "avg": avg, "zhhudong": zhudong,
+			"times": times, "price": price, "vol": vol, "avg": avg, "zhudong": zhudong,
 		},
-		"fenbi": fenbi,
+		"ticks": fenbi,
 		"items": test.GetDetailStock(code),
 	}
-	// 转换成json格式
-	jsonData, _ := json.Marshal(mapData)
-	return jsonData
+	return mapData
 }
