@@ -1,13 +1,12 @@
-package main
+package api
 
 import (
-	"fmt"
 	"github.com/gin-gonic/gin"
 	"github.com/gorilla/websocket"
 	"log"
 	"net/http"
 	"strings"
-	"test/download"
+	"test/marketime"
 	"test/stock"
 	"time"
 )
@@ -22,18 +21,7 @@ var upGrader = websocket.Upgrader{
 	},
 }
 
-func IsOpen() bool { //是否开市
-	// 工作日
-	if time.Now().Weekday() < 5 {
-		// 上午
-		if time.Now().Hour() >= 9 && time.Now().Hour() < 15 {
-			return true
-		}
-	}
-	return false
-}
-
-func detail(c *gin.Context) {
+func Detail(c *gin.Context) {
 	//升级get请求为webSocket协议
 	ws, err := upGrader.Upgrade(c.Writer, c.Request, nil)
 	if err != nil {
@@ -43,19 +31,33 @@ func detail(c *gin.Context) {
 	//设置超时
 	err = ws.SetReadDeadline(time.Now().Add(OVERTIME))
 	//读取客户端发送的数据
-	_, msg, err := ws.ReadMessage()
+	mt, msg, err := ws.ReadMessage()
 	if err != nil {
 		log.Println("读取数据失败，", err)
 		return
 	}
-	// codes := strings.Split(string(msg), ",")
-
-	oldData := stock.GetDetailData(string(msg))
+	code := string(msg)
+	// code个数超过1
+	if len(strings.Split(code, ",")) > 1 {
+		err = ws.WriteMessage(mt, []byte("代码数量不能超过1！"))
+		return
+	}
+	Vol := stock.GetDetailStocks([]string{code})[0]["vol"]
 	//写入ws数据
-	err = ws.WriteJSON(oldData)
+	err = ws.WriteJSON(stock.GetDetailData(code))
+
+	for newVol := stock.GetDetailStocks([]string{code})[0]["vol"]; marketime.IsOpen(); {
+		if newVol == Vol {
+			time.Sleep(time.Millisecond * 300)
+			continue
+		}
+		Vol = newVol
+		//写入ws数据
+		err = ws.WriteJSON(stock.GetDetailData(code))
+	}
 }
 
-func simple(c *gin.Context) {
+func Simple(c *gin.Context) {
 	//升级get请求为webSocket协议
 	ws, err := upGrader.Upgrade(c.Writer, c.Request, nil)
 	if err != nil {
@@ -76,7 +78,7 @@ func simple(c *gin.Context) {
 	//写入ws数据
 	err = ws.WriteJSON(oldData)
 
-	for newData := stock.GetSimpleStocks(codes); IsOpen(); {
+	for newData := stock.GetSimpleStocks(codes); marketime.IsOpen(); {
 		flag := false
 
 		for i := range newData {
@@ -90,31 +92,5 @@ func simple(c *gin.Context) {
 			//写入ws数据
 			err = ws.WriteJSON(oldData)
 		}
-	}
-}
-
-func main() {
-	// 下载
-	go download.GetStock(1)
-	go download.GetStock(2)
-	go download.GetStock(3)
-
-	r := gin.Default()
-	// websocket专用
-	r.GET("/ws/stock/detail", detail)
-	r.GET("/ws/stock/simple", simple)
-	// http请求
-	r.GET("/api/v1/stock/detail", func(c *gin.Context) {
-		str := c.Param("code")
-		codes := strings.Split(str, ",")
-		data := stock.GetSimpleStocks(codes)
-		fmt.Println(data)
-		c.JSON(200, gin.H{
-			"data": data,
-		})
-	})
-	err := r.Run("localhost:8080")
-	if err != nil {
-		panic(err)
 	}
 }
