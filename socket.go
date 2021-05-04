@@ -1,12 +1,13 @@
 package main
 
 import (
+	"fmt"
 	"github.com/gin-gonic/gin"
 	"github.com/gorilla/websocket"
 	"log"
 	"net/http"
 	"strings"
-	"test/redis"
+	"test/download"
 	"test/stock"
 	"time"
 )
@@ -21,6 +22,17 @@ var upGrader = websocket.Upgrader{
 	},
 }
 
+func IsOpen() bool { //是否开市
+	// 工作日
+	if time.Now().Weekday() < 5 {
+		// 上午
+		if time.Now().Hour() >= 9 && time.Now().Hour() < 15 {
+			return true
+		}
+	}
+	return false
+}
+
 func detail(c *gin.Context) {
 	//升级get请求为webSocket协议
 	ws, err := upGrader.Upgrade(c.Writer, c.Request, nil)
@@ -28,38 +40,19 @@ func detail(c *gin.Context) {
 		log.Println("升级协议失败，", err)
 	}
 	defer ws.Close()
-
 	//设置超时
 	err = ws.SetReadDeadline(time.Now().Add(OVERTIME))
 	//读取客户端发送的数据
-	mt, msg, err := ws.ReadMessage()
+	_, msg, err := ws.ReadMessage()
 	if err != nil {
 		log.Println("读取数据失败，", err)
 		return
 	}
-	// 获取代码并初始化
-	code := string(msg)
-	volMap := test.GetVolMaps([]string{code})
-	if len(volMap) == 0 {
-		_ = ws.WriteMessage(mt, []byte("该代码不存在！代码示例：600519.SH"))
-		return
-	}
+	// codes := strings.Split(string(msg), ",")
+
+	oldData := stock.GetDetailData(string(msg))
 	//写入ws数据
-	_ = ws.WriteJSON(stock.GetDetail(code))
-
-	// 若正在交易则保持连接
-	for 9 <= time.Now().Hour() && time.Now().Hour() < 15 {
-		// 0.1s间隔
-		time.Sleep(time.Millisecond * 100)
-
-		newVolMap := test.GetVolMaps([]string{code})
-		// 有更新
-		if volMap[code] != newVolMap[code] {
-			volMap = newVolMap
-			//写入ws数据
-			_ = ws.WriteJSON(stock.GetDetail(code))
-		}
-	}
+	err = ws.WriteJSON(oldData)
 }
 
 func simple(c *gin.Context) {
@@ -69,7 +62,6 @@ func simple(c *gin.Context) {
 		log.Println("升级协议失败，", err)
 	}
 	defer ws.Close()
-
 	//设置超时
 	err = ws.SetReadDeadline(time.Now().Add(OVERTIME))
 	//读取客户端发送的数据
@@ -78,36 +70,49 @@ func simple(c *gin.Context) {
 		log.Println("读取数据失败，", err)
 		return
 	}
-	// 根据逗号切片
 	codes := strings.Split(string(msg), ",")
-	// 初始化
-	volMaps := test.GetVolMaps(codes)
-	//写入ws数据
-	_ = ws.WriteJSON(test.GetSimpleStock(codes))
-	// 若正在交易则保持连接
-	for 9 <= time.Now().Hour() && time.Now().Hour() < 15 {
-		// 0.1s
-		time.Sleep(time.Millisecond * 100)
 
-		newVolMaps := test.GetVolMaps(codes)
-		// 检查是否有键值更新
-		for i := range volMaps {
-			code := volMaps[i]
-			// 有更新
-			if volMaps[code] != newVolMaps[code] {
-				volMaps = newVolMaps
-				//写入ws数据
-				_ = ws.WriteJSON(test.GetSimpleStock(codes))
-				break
+	oldData := stock.GetSimpleStocks(codes)
+	//写入ws数据
+	err = ws.WriteJSON(oldData)
+
+	for newData := stock.GetSimpleStocks(codes); IsOpen(); {
+		flag := false
+
+		for i := range newData {
+			if oldData[i]["price"] != newData[i]["price"] {
+				// 写入新数据
+				oldData[i]["price"] = newData[i]["price"]
+				flag = true
 			}
+		}
+		if flag {
+			//写入ws数据
+			err = ws.WriteJSON(oldData)
 		}
 	}
 }
 
 func main() {
+	// 下载
+	go download.GetStock(1)
+	go download.GetStock(2)
+	go download.GetStock(3)
+
 	r := gin.Default()
-	r.GET("/stock/detail", detail)
-	r.GET("/stock/simple", simple)
+	// websocket专用
+	r.GET("/ws/stock/detail", detail)
+	r.GET("/ws/stock/simple", simple)
+	// http请求
+	r.GET("/api/v1/stock/detail", func(c *gin.Context) {
+		str := c.Param("code")
+		codes := strings.Split(str, ",")
+		data := stock.GetSimpleStocks(codes)
+		fmt.Println(data)
+		c.JSON(200, gin.H{
+			"data": data,
+		})
+	})
 	err := r.Run("localhost:8080")
 	if err != nil {
 		panic(err)

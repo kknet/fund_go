@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"io/ioutil"
 	"net/http"
-	test "test/redis"
 )
 
 const (
@@ -14,16 +13,17 @@ const (
 type SourceData struct { // 东财json
 	Data struct {
 		Data []struct {
-			Time            int     `json:"t"`
-			Price           float32 `json:"p"`
-			Vol             float32 `json:"v"`
-			Type            int     `json:"bs"`
-			Amount, Zhudong float32
+			Time    int     `json:"t"`
+			Price   float32 `json:"p"`
+			Vol     float32 `json:"v"`
+			Type    int     `json:"bs"`
+			Amount  float32
+			Zhudong float32
 		} `json:"data"`
 	} `json:"data"`
 }
 
-func GetDetail(code string) interface{} { // 获取股票详情接口
+func GetDetailData(code string) interface{} { // 获取股票详情接口
 	//最后一位
 	var market = "1"
 	if code[len(code)-1] == 'Z' {
@@ -125,7 +125,7 @@ func GetDetail(code string) interface{} { // 获取股票详情接口
 			"times": times, "price": price, "vol": vol, "avg": avg, "zhudong": zhudong,
 		},
 		"ticks": fenbi,
-		"items": test.GetDetailStock(code),
+		"items": GetDetailStocks([]string{code}),
 	}
 	return mapData
 }
