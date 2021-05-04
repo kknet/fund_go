@@ -1,7 +1,6 @@
 package main
 
 import (
-	"fmt"
 	"github.com/gin-gonic/gin"
 	"strings"
 	"test/api"
@@ -26,7 +25,6 @@ func main() {
 		str := c.Param("code")
 		codes := strings.Split(str, ",")
 		data := stock.GetSimpleStocks(codes)
-		fmt.Println(data)
 		c.JSON(200, gin.H{
 			"data": data,
 		})
