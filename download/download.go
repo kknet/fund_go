@@ -209,24 +209,23 @@ func ranks(stocks []map[string]interface{}) {
 		if s["总市值"].(float64) == 0 {
 			continue
 		}
-		// 涨速排行榜
+		// 涨速
 		member := redis.Z{Member: s["code"], Score: s["涨速"].(float64)}
-		rdb.ZAdd(ctx, "rank:upSpeed", &member)
-
-		// 5分钟涨幅排行榜
+		rdb.ZAdd(ctx, "rank:up_speed", &member)
+		// 5分钟涨幅
 		member = redis.Z{Member: s["code"], Score: s["5min涨幅"].(float64)}
-		rdb.ZAdd(ctx, "rank:5minPct", &member)
-
+		rdb.ZAdd(ctx, "rank:5min_pct", &member)
+		// 涨幅
+		member = redis.Z{Member: s["code"], Score: s["pct_chg"].(float64)}
+		rdb.ZAdd(ctx, "rank:pct_chg", &member)
 		// 每分钟更新
 		if time.Now().Second() != 999 {
-			// 市值排行
+			// 市值
 			member = redis.Z{Member: s["code"], Score: s["总市值"].(float64)}
-			rdb.ZAdd(ctx, "rank:marketValue", &member)
-
-			// 主力净流入排行
+			rdb.ZAdd(ctx, "rank:market_value", &member)
+			// 主力净流入
 			member = redis.Z{Member: s["code"], Score: s["主力净流入"].(float64)}
-			rdb.ZAdd(ctx, "rank:mainNet", &member)
-
+			rdb.ZAdd(ctx, "rank:main_net", &member)
 			// 成交额
 			member = redis.Z{Member: s["code"], Score: s["amount"].(float64)}
 			rdb.ZAdd(ctx, "rank:amount", &member)
