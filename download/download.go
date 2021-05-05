@@ -2,102 +2,75 @@ package download
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"github.com/go-redis/redis/v8"
+	jsoniter "github.com/json-iterator/go"
 	"io/ioutil"
 	"log"
 	"net/http"
 	"strconv"
 	"strings"
+	"sync"
 	"test/marketime"
 	"time"
 )
 
-var ctx = context.Background()
-
 // redis数据库
+var ctx = context.Background()
 var rdb = redis.NewClient(&redis.Options{
 	Addr:     "localhost:6379",
 	Password: "",
 	DB:       0,
 })
 
-type Stock struct {
-	Price      float32 `json:"price"`
-	PctChg     float32 `json:"pct_chg"`
-	PreClose   float32 `json:"昨收"`
-	Vol        float64 `json:"vol"`
-	Amount     float64 `json:"amount"`
-	Amp        float32 `json:"amp"`
-	Vr         float32 `json:"量比"`
-	FiveMin    float32 `json:"5min涨幅"`
-	Code       string  `json:"code"`
-	High       float32 `json:"high"`
-	Low        float32 `json:"low"`
-	Open       float32 `json:"open"`
-	F1         float32 `json:"涨速"`
-	Pb         float32 `json:"pb"`
-	PeTtm      float32 `json:"pe_ttm"`
-	F24        float32 `json:"60日涨幅"`
-	F25        float32 `json:"年初至今涨跌幅"`
-	WeiBi      float32 `json:"委比"`
-	F34        int     `json:"外盘"`
-	F35        int     `json:"内盘"`
-	Roe        float32 `json:"roe"`
-	TotalShare float64 `json:"总股本"`
-	FloatShare float64 `json:"流通股本"`
-	F40        float64 `json:"营收"`
-	F41        float32 `json:"营收同比"`
-	F45        float64 `json:"净利润"`
-	F46        float32 `json:"净利润同比"`
-	TeIn       float64 `json:"特大单流入"`
-	TeOut      float64 `json:"特大单流出"`
-	BigIn      float64 `json:"大单流入"`
-	BigOut     float64 `json:"大单流出"`
-	MidNet     float64 `json:"中单净流入"`
-	SmallNet   float64 `json:"小单净流入"`
-	// 以下为需要实时计算的数据
-	Change       float32 `json:"涨跌"`
-	TurnoverRate float32 `json:"换手率"`
-	TeNet        float64 `json:"特大单净流入"`
-	BigNet       float64 `json:"大单净流入"`
-	TotalMkt     float64 `json:"总市值"`
-	FloatMkt     float64 `json:"流通市值"`
-}
+// jsoniter
+var json = jsoniter.ConfigCompatibleWithStandardLibrary
 
-func setStockData(s *Stock) { // 计算
-	//代码格式
-	if s.Code[0] == '6' {
-		s.Code += ".SH"
-	} else {
-		s.Code += ".SZ"
+/* 计算股票指标 */
+func setStockData(stocks []map[string]interface{}) []map[string]interface{} {
+	for i := range stocks {
+		s := stocks[i]
+		//代码格式
+		if s["code"].(string)[0] == '6' {
+			s["code"] = s["code"].(string) + ".SH"
+		} else {
+			s["code"] = s["code"].(string) + ".SZ"
+		}
+		var 万 float64 = 10000
+		labels := []string{"总股本", "流通股本", "特大单流入", "特大单流出", "大单流入", "大单流出", "中单净流入", "小单净流入"}
+		for i := range labels {
+			col := labels[i]
+			s[col] = s[col].(float64) / 万
+		}
+		// 主力资金
+		s["特大单净流入"] = s["特大单流入"].(float64) - s["特大单流出"].(float64)
+		s["大单净流入"] = s["大单流入"].(float64) - s["大单流出"].(float64)
+		s["主力流入"] = s["大单流入"].(float64) + s["特大单流入"].(float64)
+		s["主力流出"] = s["大单流出"].(float64) + s["特大单流出"].(float64)
+		s["主力净流入"] = s["主力流入"].(float64) - s["主力流出"].(float64)
+		// 市值
+		s["总市值"] = s["price"].(float64) * s["总股本"].(float64) / 万
+		s["流通市值"] = s["price"].(float64) * s["流通股本"].(float64) / 万
+		// 其他
+		s["change"] = s["price"].(float64) - s["close"].(float64)
+		s["换手率"] = s["vol"].(float64) / s["总股本"].(float64)
+		// 保留两位小数
 	}
-	s.Change = s.Price - s.PreClose
-	s.TurnoverRate = float32(s.Vol / s.TotalShare)
-	s.TeNet = s.TeIn - s.TeOut
-	s.BigNet = s.BigIn - s.BigOut
-	s.TotalMkt = float64(s.Price) * s.TotalShare
-	s.FloatMkt = float64(s.Price) * s.FloatShare
+	return stocks
 }
 
-type EastMoneyData struct {
-	Data struct {
-		Stocks []Stock `json:"diff"`
-	} `json:"data"`
-}
-
-func GetStock(page int) {
-	url := "https://push2.eastmoney.com/api/qt/clist/get?pz=1500&np=1&fs=m:0+t:6,m:0+t:80,m:1+t:2,m:1+t:23&fltt=2"
+/* 下载所有股票数据 */
+func getStock(page int) {
+	url := "https://push2.eastmoney.com/api/qt/clist/get?pz=2250&np=1&fs=m:0+t:6,m:0+t:80,m:1+t:2,m:1+t:23&fltt=2"
 	url += "&pn=" + strconv.Itoa(page) + "&fields="
 	// 重命名
 	nameMaps := map[string]string{
 		"f2": "price", "f3": "pct_chg", "f5": "vol", "f6": "amount", "f7": "amp", "f15": "high", "f16": "low",
-		"f17": "open", "f12": "code", "f10": "量比", "f11": "5min涨幅", "f18": "昨收", "f22": "涨速",
+		"f17": "open", "f12": "code", "f10": "量比", "f11": "5min涨幅", "f18": "close", "f22": "涨速",
 		"f23": "pb", "f24": "60日涨幅", "f25": "年初至今涨跌幅", "f33": "委比",
 		"f34": "外盘", "f35": "内盘", "f38": "总股本", "f39": "流通股本", "f115": "pe_ttm",
 		// 财务
-		"f37": "roe", "f40": "营收", "f41": "营收同比", "f45": "净利润", "f46": "净利润同比",
+		// "f37": "roe", "f40": "营收", "f41": "营收同比", "f45": "净利润", "f46": "净利润同比",
 		// 资金
 		"f64": "特大单流入", "f65": "特大单流出",
 		"f70": "大单流入", "f71": "大单流出",
@@ -114,40 +87,48 @@ func GetStock(page int) {
 		// 从东方财富下载数据
 		res, err := http.Get(url)
 		if err != nil {
-			log.Println(err)
+			panic(err)
 		}
 		// 关闭连接
 		defer res.Body.Close()
 		// 读取内容
 		body, err := ioutil.ReadAll(res.Body)
-		str := string(body)
+		str := json.Get(body, "data", "diff").ToString()
+		//改名
 		for i := range nameMaps {
-			str = strings.Replace(str, i+"\":", nameMaps[i]+"\":", -1)
+			str = strings.Replace(str, i+"\"", nameMaps[i]+"\"", -1)
 		}
-		// json解析
-		info := &EastMoneyData{}
-		err = json.Unmarshal([]byte(str), info)
+		// 定义存储类型
+		var stocks []map[string]interface{}
+		err = json.Unmarshal([]byte(str), &stocks)
+		// 计算数据
+		stocks = setStockData(stocks)
 
-		for i := range info.Data.Stocks {
-			s := info.Data.Stocks[i]
-			// 计算数据
-			setStockData(&s)
-			// 退市
-			if s.Price == 0 {
+		// 并发计算排行榜
+		var wg = sync.WaitGroup{}
+		wg.Add(1)
+		go func() {
+			ranks(stocks)
+			wg.Done()
+		}()
+
+		for i := range stocks {
+			s := stocks[i]
+			// 去掉退市
+			if s["总市值"].(float64) == 0 {
 				continue
 			}
-			// 先转换成json 再json转换成map
-			data, _ := json.Marshal(&s)
-			maps := make(map[string]interface{})
-			_ = json.Unmarshal(data, &maps)
-
-			err := rdb.HMSet(ctx, s.Code, maps).Err()
+			// 写入数据
+			err := rdb.HMSet(ctx, s["code"].(string), s).Err()
 			if err != nil {
 				log.Println(err)
 			}
 		}
+		// 等待释放
+		wg.Wait()
+
 		cost := time.Since(start)
-		fmt.Printf("EestMoney = %s\n", cost)
+		fmt.Printf("Stocks = %s\n", cost)
 
 		// 当前闭市
 		for !marketime.IsOpen() {
@@ -157,20 +138,13 @@ func GetStock(page int) {
 	}
 }
 
-func GetIndex() {
+/* 下载所有指数数据 */
+func getIndex() {
 	url := "https://push2.eastmoney.com/api/qt/clist/get?pn=1&pz=5000&po=1&np=1&fs=m:1+s:2,m:0+t:5&fltt=2&fields="
 	// 重命名
 	nameMaps := map[string]string{
-		"f2": "price", "f3": "pct_chg", "f5": "vol", "f6": "amount", "f7": "amp", "f15": "high", "f16": "low",
-		"f17": "open", "f12": "code", "f10": "量比", "f11": "5min涨幅", "f18": "昨收", "f22": "涨速",
-		"f23": "pb", "f24": "60日涨幅", "f25": "年初至今涨跌幅", "f33": "委比",
-		"f34": "外盘", "f35": "内盘", "f38": "总股本", "f39": "流通股本", "f115": "pe_ttm",
-		// 财务
-		"f37": "roe", "f40": "营收", "f41": "营收同比", "f45": "净利润", "f46": "净利润同比",
-		// 资金
-		"f64": "特大单流入", "f65": "特大单流出",
-		"f70": "大单流入", "f71": "大单流出",
-		"f78": "中单净流入", "f84": "小单净流入",
+		"f2": "price", "f3": "pct_chg", "f4": "change", "f5": "vol", "f6": "amount", "f7": "amp", "f8": "换手率",
+		"f14": "name", "f15": "high", "f16": "low", "f17": "open", "f18": "close", "f12": "code", "f11": "5min涨幅",
 	}
 	//连接参数
 	for i := range nameMaps {
@@ -179,49 +153,90 @@ func GetIndex() {
 	//去掉末尾的逗号
 	url = url[:len(url)-1]
 	for {
-		start := time.Now()
 		// 从东方财富下载数据
 		res, err := http.Get(url)
 		if err != nil {
-			log.Println(err)
+			panic(err)
 		}
 		// 关闭连接
 		defer res.Body.Close()
 		// 读取内容
 		body, err := ioutil.ReadAll(res.Body)
-		str := string(body)
+		str := json.Get(body, "data", "diff").ToString()
+		//改名
 		for i := range nameMaps {
-			str = strings.Replace(str, i+"\":", nameMaps[i]+"\":", -1)
+			str = strings.Replace(str, i+"\"", nameMaps[i]+"\"", -1)
 		}
-		// json解析
-		info := &EastMoneyData{}
-		err = json.Unmarshal([]byte(str), info)
+		// 转maps 直接存取
+		var index []map[string]interface{}
+		err = json.Unmarshal([]byte(str), &index)
 
-		for i := range info.Data.Stocks {
-			s := info.Data.Stocks[i]
-			// 计算数据
-			setStockData(&s)
-			// 退市
-			if s.Price == 0 {
+		for i := range index {
+			maps := index[i]
+			//去掉4 9开头的代码
+			if maps["code"].(string)[0] == '4' {
+				continue
+			} else if maps["code"].(string)[0] == '9' {
 				continue
 			}
-			// 先转换成json 再json转换成map
-			data, _ := json.Marshal(&s)
-			maps := make(map[string]interface{})
-			_ = json.Unmarshal(data, &maps)
-
-			err := rdb.HMSet(ctx, s.Code, maps).Err()
+			// 代码格式化
+			if maps["code"].(string)[0] == '0' {
+				maps["code"] = maps["code"].(string) + ".SH"
+			} else {
+				maps["code"] = maps["code"].(string) + ".SZ"
+			}
+			// 写入数据
+			err := rdb.HMSet(ctx, maps["code"].(string), maps).Err()
 			if err != nil {
 				log.Println(err)
 			}
 		}
-		cost := time.Since(start)
-		fmt.Printf("EestMoney = %s\n", cost)
-
+		// 间隔3秒 指数不需要高频更新
+		time.Sleep(time.Second * 3)
 		// 当前闭市
 		for !marketime.IsOpen() {
 			time.Sleep(time.Second * 1)
 			continue
 		}
 	}
+}
+
+/* 全市场 排行榜 */
+func ranks(stocks []map[string]interface{}) {
+	for i := range stocks {
+		s := stocks[i]
+		// 去掉退市
+		if s["总市值"].(float64) == 0 {
+			continue
+		}
+		// 涨速排行榜
+		member := redis.Z{Member: s["code"], Score: s["涨速"].(float64)}
+		rdb.ZAdd(ctx, "rank:upSpeed", &member)
+
+		// 5分钟涨幅排行榜
+		member = redis.Z{Member: s["code"], Score: s["5min涨幅"].(float64)}
+		rdb.ZAdd(ctx, "rank:5minPct", &member)
+
+		// 每分钟更新
+		if time.Now().Second() != 999 {
+			// 市值排行
+			member = redis.Z{Member: s["code"], Score: s["总市值"].(float64)}
+			rdb.ZAdd(ctx, "rank:marketValue", &member)
+
+			// 主力净流入排行
+			member = redis.Z{Member: s["code"], Score: s["主力净流入"].(float64)}
+			rdb.ZAdd(ctx, "rank:mainNet", &member)
+
+			// 成交额
+			member = redis.Z{Member: s["code"], Score: s["amount"].(float64)}
+			rdb.ZAdd(ctx, "rank:amount", &member)
+		}
+	}
+}
+
+func GoDownload() {
+	// 主下载函数
+	go getStock(1)
+	go getStock(2)
+	go getIndex()
 }
