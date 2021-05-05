@@ -24,6 +24,7 @@ func GetSimpleStocks(codes []string) []map[string]interface{} { // 获取股票�
 		info, err := rdb.HMGet(ctx, codes[i], "code", "name", "price", "pct_chg").Result()
 		if err != nil {
 			log.Println(err)
+			continue
 		}
 		// 创建临时maps
 		maps := map[string]interface{}{

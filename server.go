@@ -17,6 +17,11 @@ func main() {
 	// 下载
 	download.GoDownload()
 
+	//codes := stock.GetRank("pct_chg")
+	//fmt.Println(codes)
+	//res := stock.GetSimpleStocks(codes)
+	//fmt.Println(res)
+
 	r := gin.Default()
 
 	// websocket专用
