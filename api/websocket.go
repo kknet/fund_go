@@ -1,6 +1,7 @@
 package api
 
 import (
+	"fmt"
 	"github.com/gin-gonic/gin"
 	"github.com/gorilla/websocket"
 	"log"
@@ -46,9 +47,10 @@ func Detail(c *gin.Context) {
 	//写入ws数据
 	err = ws.WriteJSON(stock.GetDetailData(code))
 
-	for newVol := stock.GetDetailStocks([]string{code})[0]["vol"]; marketime.IsOpen(); {
+	for marketime.IsOpen() {
+		newVol := stock.GetDetailStocks([]string{code})[0]["vol"]
 		if newVol == Vol {
-			time.Sleep(time.Millisecond * 300)
+			time.Sleep(time.Millisecond * 100)
 			continue
 		}
 		Vol = newVol
@@ -78,19 +80,61 @@ func Simple(c *gin.Context) {
 	//写入ws数据
 	err = ws.WriteJSON(oldData)
 
-	for newData := stock.GetSimpleStocks(codes); marketime.IsOpen(); {
-		flag := false
+	for marketime.IsOpen() {
+		newData := stock.GetSimpleStocks(codes)
 
 		for i := range newData {
-			if oldData[i]["price"] != newData[i]["price"] {
+			if oldData[i]["pct_chg"] != newData[i]["pct_chg"] {
+				// 数据有变化
+				oldData = newData
 				// 写入新数据
-				oldData[i]["price"] = newData[i]["price"]
-				flag = true
+				err = ws.WriteJSON(oldData)
+				break
 			}
 		}
-		if flag {
-			//写入ws数据
-			err = ws.WriteJSON(oldData)
-		}
+		time.Sleep(time.Millisecond * 100)
+	}
+}
+
+func Rank(c *gin.Context) {
+	//升级get请求为webSocket协议
+	ws, err := upGrader.Upgrade(c.Writer, c.Request, nil)
+	if err != nil {
+		log.Println("升级协议失败，", err)
+	}
+	defer ws.Close()
+	//设置超时
+	err = ws.SetReadDeadline(time.Now().Add(OVERTIME))
+	//读取客户端发送的数据
+	_, msg, err := ws.ReadMessage()
+	if err != nil {
+		log.Println("读取数据失败，", err)
+		return
+	}
+	rankName := string(msg)
+
+	// 获取排行榜
+	scores := stock.GetRank(rankName)
+	codes := []string{}
+	// 获取代码
+	for i := range scores {
+		codes = append(codes, i)
+	}
+	fmt.Println(codes)
+	//添加简略行情数据
+	tempData := stock.GetSimpleStocks(codes)
+
+	// 与排行榜数据合并
+	for i := range tempData {
+		tempData[i][rankName] = scores[codes[i]]
+	}
+	fmt.Println(tempData)
+	//写入ws数据
+	err = ws.WriteJSON(tempData)
+	if err != nil {
+		log.Println(err)
+	}
+	for marketime.IsOpen() {
+		time.Sleep(time.Millisecond * 100)
 	}
 }

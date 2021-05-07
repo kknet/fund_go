@@ -1,7 +1,7 @@
 package stock
 
 import (
-	"encoding/json"
+	jsoniter "github.com/json-iterator/go"
 	"io/ioutil"
 	"net/http"
 )
@@ -9,6 +9,9 @@ import (
 const (
 	URL = "https://push2ex.eastmoney.com/getStockFenShi?ut=7eea3edcaed734bea9cbfc24409ed989&dpt=wzfscj&pageindex=0&sort=1&ft=1"
 )
+
+// jsoniter
+var json = jsoniter.ConfigCompatibleWithStandardLibrary
 
 type SourceData struct { // 东财json
 	Data struct {

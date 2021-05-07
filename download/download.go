@@ -36,11 +36,10 @@ func setStockData(stocks []map[string]interface{}) []map[string]interface{} {
 		} else {
 			s["code"] = s["code"].(string) + ".SZ"
 		}
-		var 万 float64 = 10000
 		labels := []string{"总股本", "流通股本", "特大单流入", "特大单流出", "大单流入", "大单流出", "中单净流入", "小单净流入"}
 		for i := range labels {
 			col := labels[i]
-			s[col] = s[col].(float64) / 万
+			s[col] = s[col].(float64) / 10000
 		}
 		// 主力资金
 		s["特大单净流入"] = s["特大单流入"].(float64) - s["特大单流出"].(float64)
@@ -49,8 +48,8 @@ func setStockData(stocks []map[string]interface{}) []map[string]interface{} {
 		s["主力流出"] = s["大单流出"].(float64) + s["特大单流出"].(float64)
 		s["主力净流入"] = s["主力流入"].(float64) - s["主力流出"].(float64)
 		// 市值
-		s["总市值"] = s["price"].(float64) * s["总股本"].(float64) / 万
-		s["流通市值"] = s["price"].(float64) * s["流通股本"].(float64) / 万
+		s["总市值"] = s["price"].(float64) * s["总股本"].(float64) / 10000
+		s["流通市值"] = s["price"].(float64) * s["流通股本"].(float64) / 10000
 		// 其他
 		s["change"] = s["price"].(float64) - s["close"].(float64)
 		s["换手率"] = s["vol"].(float64) / s["总股本"].(float64)
@@ -61,14 +60,15 @@ func setStockData(stocks []map[string]interface{}) []map[string]interface{} {
 
 /* 下载所有股票数据 */
 func getStock(page int) {
-	url := "https://push2.eastmoney.com/api/qt/clist/get?pz=2250&np=1&fs=m:0+t:6,m:0+t:80,m:1+t:2,m:1+t:23&fltt=2"
+	url := "https://push2.eastmoney.com/api/qt/clist/get?pz=5000&np=1&fs=m:0+t:6,m:0+t:80,m:1+t:2,m:1+t:23&fltt=2"
 	url += "&pn=" + strconv.Itoa(page) + "&fields="
 	// 重命名
 	nameMaps := map[string]string{
 		"f2": "price", "f3": "pct_chg", "f5": "vol", "f6": "amount", "f7": "amp", "f15": "high", "f16": "low",
-		"f17": "open", "f12": "code", "f10": "量比", "f11": "5min涨幅", "f18": "close", "f22": "涨速",
-		"f23": "pb", "f24": "60日涨幅", "f25": "年初至今涨跌幅", "f33": "委比",
-		"f34": "外盘", "f35": "内盘", "f38": "总股本", "f39": "流通股本", "f115": "pe_ttm",
+		"f17": "open", "f12": "code", "f10": "量比", "f11": "5min涨幅", "f14": "name", "f18": "close",
+		"f22": "涨速", "f23": "pb", "f33": "委比",
+		// "f24": "60日涨幅", "f25": "年初至今涨跌幅", "f34": "外盘", "f35": "内盘",
+		"f38": "总股本", "f39": "流通股本", "f115": "pe_ttm",
 		// 财务
 		// "f37": "roe", "f40": "营收", "f41": "营收同比", "f45": "净利润", "f46": "净利润同比",
 		// 资金
@@ -109,6 +109,9 @@ func getStock(page int) {
 		wg.Add(1)
 		go func() {
 			ranks(stocks)
+			if time.Now().Second() >= 55 {
+				getMarketData()
+			}
 			wg.Done()
 		}()
 
@@ -119,7 +122,7 @@ func getStock(page int) {
 				continue
 			}
 			// 写入数据
-			err := rdb.HMSet(ctx, s["code"].(string), s).Err()
+			err := rdb.HMSet(ctx, "stock:"+s["code"].(string), s).Err()
 			if err != nil {
 				log.Println(err)
 			}
@@ -186,7 +189,7 @@ func getIndex() {
 				maps["code"] = maps["code"].(string) + ".SZ"
 			}
 			// 写入数据
-			err := rdb.HMSet(ctx, maps["code"].(string), maps).Err()
+			err := rdb.HMSet(ctx, "index:"+maps["code"].(string), maps).Err()
 			if err != nil {
 				log.Println(err)
 			}
@@ -204,6 +207,5 @@ func getIndex() {
 func GoDownload() {
 	// 主下载函数
 	go getStock(1)
-	go getStock(2)
 	go getIndex()
 }

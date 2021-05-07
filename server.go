@@ -10,23 +10,19 @@ import (
 
 const ( // url前缀
 	WsUrl  = "/ws"
-	ApiUrl = "/api/v1/go"
+	ApiUrl = "/api/v1"
 )
 
 func main() {
 	// 下载
 	download.GoDownload()
 
-	//codes := stock.GetRank("pct_chg")
-	//fmt.Println(codes)
-	//res := stock.GetSimpleStocks(codes)
-	//fmt.Println(res)
-
 	r := gin.Default()
 
 	// websocket专用
 	r.GET(WsUrl+"/stock/detail", api.Detail)
 	r.GET(WsUrl+"/stock/simple", api.Simple)
+	r.GET(WsUrl+"/stock/rank", api.Rank)
 
 	// http请求
 	r.GET(ApiUrl+"/stock/detail", func(c *gin.Context) {
@@ -36,6 +32,7 @@ func main() {
 			"data": data,
 		})
 	})
+
 	r.GET(ApiUrl+"/stock/simple", func(c *gin.Context) {
 		code := c.Query("code")
 		codes := strings.Split(code, ",")
