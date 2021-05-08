@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"github.com/gin-gonic/gin"
 	"strings"
 	"test/api"
@@ -46,4 +47,5 @@ func main() {
 	if err != nil {
 		panic(err)
 	}
+	fmt.Println("服务启动成功！")
 }

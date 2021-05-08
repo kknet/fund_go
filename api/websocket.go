@@ -1,7 +1,6 @@
 package api
 
 import (
-	"fmt"
 	"github.com/gin-gonic/gin"
 	"github.com/gorilla/websocket"
 	"log"
@@ -65,6 +64,7 @@ func Simple(c *gin.Context) {
 	if err != nil {
 		log.Println("升级协议失败，", err)
 	}
+	// 函数退出时关闭ws
 	defer ws.Close()
 	//设置超时
 	err = ws.SetReadDeadline(time.Now().Add(OVERTIME))
@@ -81,12 +81,13 @@ func Simple(c *gin.Context) {
 	err = ws.WriteJSON(oldData)
 
 	for marketime.IsOpen() {
+		//获取新数据
 		newData := stock.GetSimpleStocks(codes)
-
-		for i := range newData {
-			if oldData[i]["pct_chg"] != newData[i]["pct_chg"] {
+		// 查看是否有更新
+		for i, value := range newData {
+			if oldData[i]["pct_chg"] != value["pct_chg"] {
 				// 数据有变化
-				oldData = newData
+				oldData[i] = value
 				// 写入新数据
 				err = ws.WriteJSON(oldData)
 				break
@@ -120,21 +121,35 @@ func Rank(c *gin.Context) {
 	for i := range scores {
 		codes = append(codes, i)
 	}
-	fmt.Println(codes)
 	//添加简略行情数据
-	tempData := stock.GetSimpleStocks(codes)
+	oldData := stock.GetSimpleStocks(codes)
 
 	// 与排行榜数据合并
-	for i := range tempData {
-		tempData[i][rankName] = scores[codes[i]]
+	for i := range oldData {
+		oldData[i][rankName] = scores[codes[i]]
 	}
-	fmt.Println(tempData)
 	//写入ws数据
-	err = ws.WriteJSON(tempData)
+	err = ws.WriteJSON(oldData)
 	if err != nil {
 		log.Println(err)
 	}
+
 	for marketime.IsOpen() {
-		time.Sleep(time.Millisecond * 100)
+		time.Sleep(time.Second * 3)
+		// 获取排行榜
+		scores := stock.GetRank(rankName)
+		codes := []string{}
+		// 获取代码
+		for i := range scores {
+			codes = append(codes, i)
+		}
+		//添加简略行情数据
+		oldData := stock.GetSimpleStocks(codes)
+		// 与排行榜数据合并
+		for i := range oldData {
+			oldData[i][rankName] = scores[codes[i]]
+		}
+		//写入ws数据
+		err = ws.WriteJSON(oldData)
 	}
 }
