@@ -1,7 +1,6 @@
 package main
 
 import (
-	"fmt"
 	"github.com/gin-gonic/gin"
 	"strings"
 	"test/api"
@@ -23,23 +22,32 @@ func main() {
 	// websocket专用
 	r.GET(WsUrl+"/stock/detail", api.Detail)
 	r.GET(WsUrl+"/stock/simple", api.Simple)
-	r.GET(WsUrl+"/stock/rank", api.Rank)
+	//r.GET(WsUrl+"/stock/rank", api.Rank)
 
 	// http请求
 	r.GET(ApiUrl+"/stock/detail", func(c *gin.Context) {
 		code := c.Query("code")
-		data := stock.GetDetailData(code)
+		data := stock.GetDetailStock(code)
 		c.JSON(200, gin.H{
-			"data": data,
+			"status": true, "data": data,
 		})
 	})
 
 	r.GET(ApiUrl+"/stock/simple", func(c *gin.Context) {
 		code := c.Query("code")
 		codes := strings.Split(code, ",")
-		data := stock.GetSimpleStocks(codes)
+		data := stock.GetSimpleStock(codes)
 		c.JSON(200, gin.H{
-			"data": data,
+			"status": true, "data": data,
+		})
+	})
+
+	r.GET(ApiUrl+"/stock/search", func(c *gin.Context) {
+		input := c.Query("input")
+		searchType := c.Query("type")
+		data := stock.Search(input, searchType)
+		c.JSON(200, gin.H{
+			"status": true, "data": data,
 		})
 	})
 
@@ -47,5 +55,4 @@ func main() {
 	if err != nil {
 		panic(err)
 	}
-	fmt.Println("服务启动成功！")
 }

@@ -6,6 +6,7 @@ import (
 	"log"
 	"net/http"
 	"strings"
+	"test/download"
 	"test/marketime"
 	"test/stock"
 	"time"
@@ -21,6 +22,7 @@ var upGrader = websocket.Upgrader{
 	},
 }
 
+// Detail /* 实时图表行情 */
 func Detail(c *gin.Context) {
 	//升级get请求为webSocket协议
 	ws, err := upGrader.Upgrade(c.Writer, c.Request, nil)
@@ -42,22 +44,23 @@ func Detail(c *gin.Context) {
 		err = ws.WriteMessage(mt, []byte("代码数量不能超过1！"))
 		return
 	}
-	Vol := stock.GetDetailStocks([]string{code})[0]["vol"]
+	Vol := stock.GetSimpleStock([]string{code})[0]["vol"]
 	//写入ws数据
-	err = ws.WriteJSON(stock.GetDetailData(code))
+	err = ws.WriteJSON(stock.GetDetailStock(code))
 
 	for marketime.IsOpen() {
-		newVol := stock.GetDetailStocks([]string{code})[0]["vol"]
+		newVol := stock.GetSimpleStock([]string{code})[0]["vol"]
 		if newVol == Vol {
 			time.Sleep(time.Millisecond * 100)
 			continue
 		}
 		Vol = newVol
 		//写入ws数据
-		err = ws.WriteJSON(stock.GetDetailData(code))
+		err = ws.WriteJSON(stock.GetDetailStock(code))
 	}
 }
 
+// Simple /* 简略行情 */
 func Simple(c *gin.Context) {
 	//升级get请求为webSocket协议
 	ws, err := upGrader.Upgrade(c.Writer, c.Request, nil)
@@ -76,13 +79,15 @@ func Simple(c *gin.Context) {
 	}
 	codes := strings.Split(string(msg), ",")
 
-	oldData := stock.GetSimpleStocks(codes)
+	oldData := stock.GetSimpleStock(codes)
 	//写入ws数据
 	err = ws.WriteJSON(oldData)
 
 	for marketime.IsOpen() {
+		// 阻塞
+		_ = <-download.MyChannel
 		//获取新数据
-		newData := stock.GetSimpleStocks(codes)
+		newData := stock.GetSimpleStock(codes)
 		// 查看是否有更新
 		for i, value := range newData {
 			if oldData[i]["pct_chg"] != value["pct_chg"] {
@@ -93,10 +98,10 @@ func Simple(c *gin.Context) {
 				break
 			}
 		}
-		time.Sleep(time.Millisecond * 100)
 	}
 }
 
+/*
 func Rank(c *gin.Context) {
 	//升级get请求为webSocket协议
 	ws, err := upGrader.Upgrade(c.Writer, c.Request, nil)
@@ -122,7 +127,7 @@ func Rank(c *gin.Context) {
 		codes = append(codes, i)
 	}
 	//添加简略行情数据
-	oldData := stock.GetSimpleStocks(codes)
+	oldData := stock.GetStocks(codes)
 
 	// 与排行榜数据合并
 	for i := range oldData {
@@ -144,7 +149,7 @@ func Rank(c *gin.Context) {
 			codes = append(codes, i)
 		}
 		//添加简略行情数据
-		oldData := stock.GetSimpleStocks(codes)
+		oldData := stock.GetStocks(codes)
 		// 与排行榜数据合并
 		for i := range oldData {
 			oldData[i][rankName] = scores[codes[i]]
@@ -153,3 +158,4 @@ func Rank(c *gin.Context) {
 		err = ws.WriteJSON(oldData)
 	}
 }
+*/

@@ -60,7 +60,9 @@ func setStockData(stocks []map[string]interface{}) {
 
 /* 下载所有股票数据 */
 func getStock() {
-	url := "https://push2.eastmoney.com/api/qt/clist/get?pz=5000&np=1&fs=m:0+t:6,m:0+t:80,m:1+t:2,m:1+t:23&fltt=2&&pn=1&fields="
+	url := "https://push2.eastmoney.com/api/qt/clist/get?pz=5000&np=1&fs=m:0+t:6,m:0+t:80,m:1+t:2,m:1+t:23"
+	// 按成交额降序
+	url += "&fltt=2&po=1&fid=f6&pn=1&fields="
 	// 重命名
 	nameMaps := map[string]string{
 		"f2": "price", "f3": "pct_chg", "f5": "vol", "f6": "amount", "f7": "amp", "f15": "high", "f16": "low",
@@ -96,14 +98,17 @@ func getStock() {
 		str = strings.Replace(str, i+"\"", nameMaps[i]+"\"", -1)
 	}
 	// json解析
-	err = json.Unmarshal([]byte(str), &AllStock)
+	var temp []map[string]interface{}
+	err = json.Unmarshal([]byte(str), &temp)
 	// 计算数据
-	setStockData(AllStock)
+	setStockData(temp)
+	AllStock = temp
 }
 
 /* 下载所有指数数据 */
 func getIndex() {
-	url := "https://push2.eastmoney.com/api/qt/clist/get?pn=1&pz=5000&po=1&np=1&fs=m:1+s:2,m:0+t:5&fltt=2&fields="
+	url := "https://push2.eastmoney.com/api/qt/clist/get?pn=1&pz=5000&po=1&np=1&fs=m:1+s:2,m:0+t:5"
+	url += "&fltt=2&fields="
 	// 重命名
 	nameMaps := map[string]string{
 		"f2": "price", "f3": "pct_chg", "f4": "change", "f5": "vol", "f6": "amount", "f7": "amp", "f8": "换手率",
@@ -130,32 +135,48 @@ func getIndex() {
 		str = strings.Replace(str, i+"\"", nameMaps[i]+"\"", -1)
 	}
 	// json解析
-	err = json.Unmarshal([]byte(str), &AllIndex)
+	var temp []map[string]interface{}
+	err = json.Unmarshal([]byte(str), &temp)
+	for i := range temp {
+		s := temp[i]
+		//代码格式
+		if s["code"].(string)[0] == '0' {
+			s["code"] = s["code"].(string) + ".SH"
+		} else {
+			s["code"] = s["code"].(string) + ".SZ"
+		}
+	}
+	AllIndex = temp
 }
 
+// MyChannel 定义通道
+var MyChannel = make(chan bool)
+
+// GoDownload 主下载函数
 func GoDownload() {
-	// 主下载函数
+	// 股票
 	go func() {
 		for {
 			getStock()
-			for !marketime.IsOpen() { // 闭市
+			for !marketime.IsOpen() {
 			}
-			time.Sleep(time.Second*1 + time.Millisecond*500)
+			// 更新完成后传入通道
+			MyChannel <- true
+			// 1秒
+			time.Sleep(time.Second * 1)
 		}
 	}()
-
+	// 指数
 	go func() {
 		for {
 			getIndex()
-			for !marketime.IsOpen() { // 闭市
+			for !marketime.IsOpen() {
 			}
-			time.Sleep(time.Second * 5)
+			time.Sleep(time.Second * 3)
 		}
 	}()
-
 	// 求实时排行榜
 	go ranks(AllStock)
-
 	// 求市场数据
 	//go getMarketData()
 }
