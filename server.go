@@ -13,6 +13,7 @@ const ( // url前缀
 	ApiUrl = "/api/v1"
 )
 
+/* 主函数 */
 func main() {
 	// 下载
 	download.GoDownload()
@@ -42,10 +43,37 @@ func main() {
 		})
 	})
 
+	// 市场页面聚合接口
+	r.GET(ApiUrl+"/stock/market", func(c *gin.Context) {
+		idsType := c.Query("type")
+		maps := map[string]interface{}{
+			"numbers":  stock.GetNumbers(),
+			"industry": stock.GetIndustryData(idsType),
+		}
+		c.JSON(200, gin.H{
+			"status": true, "data": maps,
+		})
+	})
+
 	r.GET(ApiUrl+"/stock/search", func(c *gin.Context) {
 		input := c.Query("input")
 		searchType := c.Query("type")
 		data := stock.Search(input, searchType)
+		c.JSON(200, gin.H{
+			"status": true, "data": data,
+		})
+	})
+
+	r.GET(ApiUrl+"/stock/industry", func(c *gin.Context) {
+		idsType := c.Query("type")
+		data := stock.GetIndustryData(idsType)
+		c.JSON(200, gin.H{
+			"status": true, "data": data,
+		})
+	})
+
+	r.GET(ApiUrl+"/stock/numbers", func(c *gin.Context) {
+		data := stock.GetNumbers()
 		c.JSON(200, gin.H{
 			"status": true, "data": data,
 		})

@@ -47,6 +47,9 @@ func Detail(c *gin.Context) {
 	Vol := stock.GetSimpleStock([]string{code})[0]["vol"]
 	//写入ws数据
 	err = ws.WriteJSON(stock.GetDetailStock(code))
+	if err != nil {
+		log.Println(err)
+	}
 
 	for marketime.IsOpen() {
 		newVol := stock.GetSimpleStock([]string{code})[0]["vol"]
