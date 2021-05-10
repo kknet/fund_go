@@ -44,22 +44,22 @@ func Detail(c *gin.Context) {
 		err = ws.WriteMessage(mt, []byte("代码数量不能超过1！"))
 		return
 	}
-	Vol := stock.GetSimpleStock([]string{code})[0]["vol"]
+	Vol := stock.GetDetailStock(code)["vol"]
 	//写入ws数据
-	err = ws.WriteJSON(stock.GetDetailStock(code))
+	err = ws.WriteJSON(stock.GetDetailData(code))
 	if err != nil {
 		log.Println(err)
 	}
 
 	for marketime.IsOpen() {
-		newVol := stock.GetSimpleStock([]string{code})[0]["vol"]
+		newVol := stock.GetDetailStock(code)["vol"]
 		if newVol == Vol {
 			time.Sleep(time.Millisecond * 100)
 			continue
 		}
 		Vol = newVol
 		//写入ws数据
-		err = ws.WriteJSON(stock.GetDetailStock(code))
+		err = ws.WriteJSON(stock.GetDetailData(code))
 	}
 }
 

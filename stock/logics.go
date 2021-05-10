@@ -28,8 +28,8 @@ type SourceData struct { // 东财json
 	} `json:"data"`
 }
 
-// GetDetailStock /* 获取单只股票所有信息 （图表） */
-func GetDetailStock(code string) interface{} {
+// GetDetailData /* 获取单只股票所有信息 （图表） */
+func GetDetailData(code string) interface{} {
 	//最后一位
 	var market = "1"
 	if code[len(code)-1] == 'Z' {
@@ -141,12 +141,35 @@ func GetDetailStock(code string) interface{} {
 			"times": times, "price": price, "vol": vol, "avg": avg, "zhudong": zhudong,
 		},
 		"ticks": fenbi,
-		"items": GetSimpleStock([]string{code}),
+		"items": GetDetailStock(code),
 	}
 	return mapData
 }
 
-// GetSimpleStock /* 获取多只股票简略信息 */
+// GetDetailStock /* 获取单只股票详细信息 */
+func GetDetailStock(code string) map[string]interface{} {
+	// 初始化
+	results := make(map[string]interface{}, 0)
+
+	// 从股票中搜索
+	for _, item := range download.AllStock {
+		if item["code"] == code {
+			results = item
+			goto Result
+		}
+	}
+	// 为指数
+	for _, item := range download.AllIndex {
+		if item["code"] == code {
+			results = item
+			goto Result
+		}
+	}
+Result:
+	return results
+}
+
+// GetSimpleStock /* 获取多只股票简略信息  */
 func GetSimpleStock(codes []string) []map[string]interface{} {
 	// 设置最大数量
 	if len(codes) > 30 {
@@ -154,26 +177,26 @@ func GetSimpleStock(codes []string) []map[string]interface{} {
 	}
 	// 初始化
 	results := make([]map[string]interface{}, 0)
-
+	// 临时变量
+	var item map[string]interface{}
 	for _, code := range codes {
-		flag := 0
 		// 从股票中搜索
-		for _, item := range download.AllStock {
+		for _, item = range download.AllStock {
 			if item["code"] == code {
-				results = append(results, item)
-				flag = 1
-				break
+				goto Append
 			}
 		}
 		// 为指数
-		if flag == 0 {
-			for _, item := range download.AllIndex {
-				if item["code"] == code {
-					results = append(results, item)
-					break
-				}
+		for _, item = range download.AllIndex {
+			if item["code"] == code {
+				goto Append
 			}
 		}
+	Append:
+		maps := map[string]interface{}{
+			"code": item["code"], "name": item["name"], "price": item["price"], "pct_chg": item["pct_chg"],
+		}
+		results = append(results, maps)
 	}
 	return results
 }
