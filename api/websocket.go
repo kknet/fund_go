@@ -5,6 +5,7 @@ import (
 	"github.com/gorilla/websocket"
 	"log"
 	"net/http"
+	"reflect"
 	"strings"
 	"test/download"
 	"test/marketime"
@@ -44,20 +45,20 @@ func Detail(c *gin.Context) {
 		err = ws.WriteMessage(mt, []byte("代码数量不能超过1！"))
 		return
 	}
-	Vol := stock.GetDetailStock(code)["vol"]
+	oldData := stock.GetStockList([]string{code})
 	//写入ws数据
 	err = ws.WriteJSON(stock.GetDetailData(code))
-	if err != nil {
-		log.Println(err)
-	}
 
 	for marketime.IsOpen() {
-		newVol := stock.GetDetailStock(code)["vol"]
-		if newVol == Vol {
-			time.Sleep(time.Millisecond * 100)
+		// 阻塞
+		_ = <-download.MyChannel
+
+		newData := stock.GetStockList([]string{code})
+		// 相等则不写入，继续阻塞
+		if reflect.DeepEqual(oldData, newData) {
 			continue
 		}
-		Vol = newVol
+		oldData = newData
 		//写入ws数据
 		err = ws.WriteJSON(stock.GetDetailData(code))
 	}
@@ -82,7 +83,7 @@ func Simple(c *gin.Context) {
 	}
 	codes := strings.Split(string(msg), ",")
 
-	oldData := stock.GetSimpleStock(codes)
+	oldData := stock.GetStockList(codes)
 	//写入ws数据
 	err = ws.WriteJSON(oldData)
 
@@ -90,17 +91,14 @@ func Simple(c *gin.Context) {
 		// 阻塞
 		_ = <-download.MyChannel
 		//获取新数据
-		newData := stock.GetSimpleStock(codes)
-		// 查看是否有更新
-		for i, value := range newData {
-			if oldData[i]["pct_chg"] != value["pct_chg"] {
-				// 数据有变化
-				oldData[i] = value
-				// 写入新数据
-				err = ws.WriteJSON(oldData)
-				break
-			}
+		newData := stock.GetStockList(codes)
+		// 相等则不写入，继续阻塞
+		if reflect.DeepEqual(oldData, newData) {
+			continue
 		}
+		// 写入新数据
+		err = ws.WriteJSON(oldData)
+		oldData = newData
 	}
 }
 

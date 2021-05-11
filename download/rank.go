@@ -1,9 +1,18 @@
 package download
 
 import (
+	"context"
 	"github.com/go-redis/redis/v8"
 	"time"
 )
+
+// redis数据库
+var ctx = context.Background()
+
+var rdb = redis.NewClient(&redis.Options{
+	Addr: "localhost:6379",
+	DB:   0,
+})
 
 /* 更新全市场 排行榜 */
 func ranks(stocks []map[string]interface{}) {

@@ -28,7 +28,7 @@ func main() {
 	// http请求
 	r.GET(ApiUrl+"/stock/detail", func(c *gin.Context) {
 		code := c.Query("code")
-		data := stock.GetDetailStock(code)
+		data := stock.GetDetailData(code)
 		c.JSON(200, gin.H{
 			"status": true, "data": data,
 		})
@@ -37,7 +37,7 @@ func main() {
 	r.GET(ApiUrl+"/stock/simple", func(c *gin.Context) {
 		code := c.Query("code")
 		codes := strings.Split(code, ",")
-		data := stock.GetSimpleStock(codes)
+		data := stock.GetStockList(codes)
 		c.JSON(200, gin.H{
 			"status": true, "data": data,
 		})
@@ -45,10 +45,16 @@ func main() {
 
 	// 市场页面聚合接口
 	r.GET(ApiUrl+"/stock/market", func(c *gin.Context) {
-		idsType := c.Query("type")
-		maps := map[string]interface{}{
-			"numbers":  stock.GetNumbers(),
-			"industry": stock.GetIndustryData(idsType),
+		marketType := c.Query("marketType")
+		var maps map[string]interface{}
+		// 中国股市
+		if marketType == "CN" {
+			maps = map[string]interface{}{
+				"numbers":  stock.GetNumbers(),
+				"industry": stock.GetIndustryData("industry"),
+				"sw":       stock.GetIndustryData("sw"),
+				"area":     stock.GetIndustryData("area"),
+			}
 		}
 		c.JSON(200, gin.H{
 			"status": true, "data": maps,
@@ -64,16 +70,9 @@ func main() {
 		})
 	})
 
-	r.GET(ApiUrl+"/stock/industry", func(c *gin.Context) {
-		idsType := c.Query("type")
-		data := stock.GetIndustryData(idsType)
-		c.JSON(200, gin.H{
-			"status": true, "data": data,
-		})
-	})
-
-	r.GET(ApiUrl+"/stock/numbers", func(c *gin.Context) {
-		data := stock.GetNumbers()
+	// 市场云图
+	r.GET(ApiUrl+"/stock/cloud", func(c *gin.Context) {
+		data := stock.GetCloudMap()
 		c.JSON(200, gin.H{
 			"status": true, "data": data,
 		})

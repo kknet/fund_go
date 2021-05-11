@@ -1,8 +1,6 @@
 package download
 
 import (
-	"context"
-	"github.com/go-redis/redis/v8"
 	jsoniter "github.com/json-iterator/go"
 	"io/ioutil"
 	"net/http"
@@ -11,18 +9,12 @@ import (
 	"time"
 )
 
-// redis数据库
-var ctx = context.Background()
-
-var rdb = redis.NewClient(&redis.Options{
-	Addr: "localhost:6379",
-	DB:   0,
-})
-
 var json = jsoniter.ConfigCompatibleWithStandardLibrary
 
-var AllStock []map[string]interface{}
-var AllIndex []map[string]interface{}
+var CNStock []map[string]interface{}
+var USStock []map[string]interface{}
+var HKStock []map[string]interface{}
+var CNIndex []map[string]interface{}
 
 /* 计算股票指标 */
 func setStockData(stocks []map[string]interface{}) {
@@ -58,8 +50,8 @@ func setStockData(stocks []map[string]interface{}) {
 	}
 }
 
-/* 下载所有股票数据 */
-func getStock() {
+/* 下载沪深股票 */
+func getCNStock() {
 	url := "https://push2.eastmoney.com/api/qt/clist/get?pz=5000&np=1&fs=m:0+t:6,m:0+t:80,m:1+t:2,m:1+t:23"
 	// 按成交额降序
 	url += "&fltt=2&po=1&fid=f6&pn=1&fields="
@@ -102,10 +94,48 @@ func getStock() {
 	err = json.Unmarshal([]byte(str), &temp)
 	// 计算数据
 	setStockData(temp)
-	AllStock = temp
+	CNStock = temp
 }
 
-/* 下载所有指数数据 */
+/* 下载美股股票 */
+func getUSStock() {
+	url := "https://xueqiu.com/service/v5/stock/screener/quote/list?size=2000&order_by=market_capital&type=us"
+	// 从雪球下载数据
+	res, err := http.Get(url)
+	if err != nil {
+		panic(err)
+	}
+	// 关闭连接
+	defer res.Body.Close()
+	// 读取内容
+	body, err := ioutil.ReadAll(res.Body)
+	str := json.Get(body, "data", "list").ToString()
+	// json解析
+	var temp []map[string]interface{}
+	err = json.Unmarshal([]byte(str), &temp)
+	USStock = temp
+}
+
+/* 下载香港股票 */
+func getHKStock() {
+	url := "https://xueqiu.com/service/v5/stock/screener/quote/list?size=3000&order_by=market_capital&type=hk"
+	// 从雪球下载数据
+	res, err := http.Get(url)
+	if err != nil {
+		panic(err)
+	}
+	// 关闭连接
+	defer res.Body.Close()
+	// 读取内容
+	body, err := ioutil.ReadAll(res.Body)
+	str := json.Get(body, "data", "list").ToString()
+	// json解析
+	var temp []map[string]interface{}
+	err = json.Unmarshal([]byte(str), &temp)
+	HKStock = temp
+}
+
+/* 下载所有指数 */
 func getIndex() {
 	url := "https://push2.eastmoney.com/api/qt/clist/get?pn=1&pz=5000&po=1&np=1&fs=m:1+s:2,m:0+t:5"
 	url += "&fltt=2&fields="
@@ -146,27 +176,43 @@ func getIndex() {
 			s["code"] = s["code"].(string) + ".SZ"
 		}
 	}
-	AllIndex = temp
+	CNIndex = temp
 }
 
-// MyChannel 定义通道
 var MyChannel = make(chan bool)
+var HKChan = make(chan bool)
+var USChan = make(chan bool)
 
 // GoDownload 主下载函数
 func GoDownload() {
-	// 股票
+	// 沪深股票
 	go func() {
 		for {
-			getStock()
+			getCNStock()
 			for !marketime.IsOpen() {
 			}
 			// 更新完成后传入通道
 			MyChannel <- true
-			// 1秒
 			time.Sleep(time.Second * 1)
 		}
 	}()
-	// 指数
+	// 美股股票
+	go func() {
+		for {
+			getUSStock()
+			USChan <- true
+			time.Sleep(time.Second * 60)
+		}
+	}()
+	// 香港股票
+	go func() {
+		for {
+			getHKStock()
+			HKChan <- true
+			time.Sleep(time.Second * 60)
+		}
+	}()
+	// 沪深指数
 	go func() {
 		for {
 			getIndex()
@@ -176,7 +222,5 @@ func GoDownload() {
 		}
 	}()
 	// 求实时排行榜
-	go ranks(AllStock)
-	// 求市场数据
-	//go getMarketData()
+	go ranks(CNStock)
 }
