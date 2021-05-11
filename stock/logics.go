@@ -1,6 +1,7 @@
 package stock
 
 import (
+	"fmt"
 	jsoniter "github.com/json-iterator/go"
 	"io/ioutil"
 	"net/http"
@@ -217,4 +218,18 @@ func Search(input string, searchType string) []map[string]interface{} {
 		}
 	}
 	return results
+}
+
+// GetNorthFlow /* 北向资金流向 */
+func GetNorthFlow() {
+	url := "https://push2.eastmoney.com/api/qt/kamt.rtmin/get?fields1=f1,f3&fields2=f52,f54,f56"
+	res, err := http.Get(url)
+	if err != nil {
+		panic(err)
+	}
+	// 关闭连接
+	defer res.Body.Close()
+	// 读取内容
+	body, err := ioutil.ReadAll(res.Body)
+	fmt.Println(body)
 }

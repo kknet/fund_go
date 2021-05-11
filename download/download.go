@@ -1,25 +1,75 @@
 package download
 
 import (
+	"context"
+	"fmt"
 	jsoniter "github.com/json-iterator/go"
+	"go.mongodb.org/mongo-driver/mongo"
+	"go.mongodb.org/mongo-driver/mongo/options"
 	"io/ioutil"
+	"log"
 	"net/http"
 	"strings"
 	"test/marketime"
 	"time"
 )
 
+var ctx = context.Background()
 var json = jsoniter.ConfigCompatibleWithStandardLibrary
+
+// mongo
+var client = connectToMongo()
 
 var CNStock []map[string]interface{}
 var USStock []map[string]interface{}
 var HKStock []map[string]interface{}
 var CNIndex []map[string]interface{}
 
+// 连接mongoDB数据库
+func connectToMongo() *mongo.Client {
+	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
+	client, err := mongo.Connect(ctx, options.Client().ApplyURI("mongodb://localhost:27017"))
+	if err != nil {
+		panic(err)
+	}
+	return client
+}
+
+// 写入mongo
+func writeToMongo(stocks []map[string]interface{}, marketType string) {
+	begin := time.Now()
+	collection := client.Database("stock").Collection(marketType)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	//var id []interface{}
+	var docs []interface{}
+	for _, item := range stocks {
+		item["_id"] = item["code"]
+		docs = append(docs, item)
+	}
+	//}
+	//	id = append(id, bson.M{"_id": item["code"]})
+	//	docs = append(docs, item)
+	//}
+	//更新
+	err := collection.Drop(ctx)
+	if err != nil {
+		log.Println(err)
+	}
+	_, err = collection.InsertMany(ctx, docs)
+	//_, err := collection.UpdateMany(ctx, id, docs)
+	if err != nil {
+		log.Println(err)
+	}
+	sl := time.Since(begin)
+	fmt.Println(sl)
+}
+
 /* 计算股票指标 */
 func setStockData(stocks []map[string]interface{}) {
-	for i := range stocks {
-		s := stocks[i]
+	for _, s := range stocks {
 		//代码格式
 		if s["code"].(string)[0] == '6' {
 			s["code"] = s["code"].(string) + ".SH"
@@ -75,64 +125,91 @@ func getCNStock() {
 	}
 	//去掉末尾的逗号
 	url = url[:len(url)-1]
-	// 从东方财富下载数据
-	res, err := http.Get(url)
-	if err != nil {
-		panic(err)
+
+	for {
+		// 从东方财富下载数据
+		res, err := http.Get(url)
+		if err != nil {
+			panic(err)
+		}
+		// 关闭连接
+		defer res.Body.Close()
+		// 读取内容
+		body, err := ioutil.ReadAll(res.Body)
+		str := json.Get(body, "data", "diff").ToString()
+		//改名
+		for i := range nameMaps {
+			str = strings.Replace(str, i+"\"", nameMaps[i]+"\"", -1)
+		}
+		// json解析
+		var temp []map[string]interface{}
+		if err = json.Unmarshal([]byte(str), &temp); err != nil {
+			panic(err)
+		}
+		// 计算数据
+		setStockData(temp)
+		writeToMongo(temp, "CNStock")
+		// 更新完成后传入通道
+		MyChannel <- true
+		time.Sleep(time.Second * 1)
+
+		for !marketime.IsOpen() {
+		}
 	}
-	// 关闭连接
-	defer res.Body.Close()
-	// 读取内容
-	body, err := ioutil.ReadAll(res.Body)
-	str := json.Get(body, "data", "diff").ToString()
-	//改名
-	for i := range nameMaps {
-		str = strings.Replace(str, i+"\"", nameMaps[i]+"\"", -1)
-	}
-	// json解析
-	var temp []map[string]interface{}
-	err = json.Unmarshal([]byte(str), &temp)
-	// 计算数据
-	setStockData(temp)
-	CNStock = temp
 }
 
 /* 下载美股股票 */
 func getUSStock() {
-	url := "https://xueqiu.com/service/v5/stock/screener/quote/list?size=2000&order_by=market_capital&type=us"
+	url := "https://xueqiu.com/service/v5/stock/screener/quote/list?size=8000&order_by=amount&type=us"
 	// 从雪球下载数据
-	res, err := http.Get(url)
-	if err != nil {
-		panic(err)
+	for {
+		res, err := http.Get(url)
+		if err != nil {
+			panic(err)
+		}
+		// 关闭连接
+		defer res.Body.Close()
+		// 读取内容
+		body, err := ioutil.ReadAll(res.Body)
+		str := json.Get(body, "data", "list").ToString()
+		// json解析
+		var temp []map[string]interface{}
+		err = json.Unmarshal([]byte(str), &temp)
+		// 添加代码
+		for _, item := range temp {
+			item["code"] = item["symbol"].(string) + ".US"
+		}
+		writeToMongo(temp, "USStock")
+		//USChan <- true
+		//time.Sleep(time.Second * 60)
 	}
-	// 关闭连接
-	defer res.Body.Close()
-	// 读取内容
-	body, err := ioutil.ReadAll(res.Body)
-	str := json.Get(body, "data", "list").ToString()
-	// json解析
-	var temp []map[string]interface{}
-	err = json.Unmarshal([]byte(str), &temp)
-	USStock = temp
 }
 
 /* 下载香港股票 */
 func getHKStock() {
-	url := "https://xueqiu.com/service/v5/stock/screener/quote/list?size=3000&order_by=market_capital&type=hk"
+	url := "https://xueqiu.com/service/v5/stock/screener/quote/list?size=4000&order_by=amount&type=hk"
 	// 从雪球下载数据
-	res, err := http.Get(url)
-	if err != nil {
-		panic(err)
+	for {
+		res, err := http.Get(url)
+		if err != nil {
+			panic(err)
+		}
+		// 关闭连接
+		defer res.Body.Close()
+		// 读取内容
+		body, err := ioutil.ReadAll(res.Body)
+		str := json.Get(body, "data", "list").ToString()
+		// json解析
+		var temp []map[string]interface{}
+		err = json.Unmarshal([]byte(str), &temp)
+		// 添加代码
+		for _, item := range temp {
+			item["code"] = item["symbol"].(string) + ".HK"
+		}
+		writeToMongo(temp, "HKStock")
+		HKChan <- true
+		time.Sleep(time.Second * 60)
 	}
-	// 关闭连接
-	defer res.Body.Close()
-	// 读取内容
-	body, err := ioutil.ReadAll(res.Body)
-	str := json.Get(body, "data", "list").ToString()
-	// json解析
-	var temp []map[string]interface{}
-	err = json.Unmarshal([]byte(str), &temp)
-	HKStock = temp
 }
 
 /* 下载所有指数 */
@@ -151,32 +228,38 @@ func getIndex() {
 	//去掉末尾的逗号
 	url = url[:len(url)-1]
 	// 从东方财富下载数据
-	res, err := http.Get(url)
-	if err != nil {
-		panic(err)
-	}
-	// 关闭连接
-	defer res.Body.Close()
-	// 读取内容
-	body, err := ioutil.ReadAll(res.Body)
-	str := json.Get(body, "data", "diff").ToString()
-	//改名
-	for i := range nameMaps {
-		str = strings.Replace(str, i+"\"", nameMaps[i]+"\"", -1)
-	}
-	// json解析
-	var temp []map[string]interface{}
-	err = json.Unmarshal([]byte(str), &temp)
-	for i := range temp {
-		s := temp[i]
-		//代码格式
-		if s["code"].(string)[0] == '0' {
-			s["code"] = s["code"].(string) + ".SH"
-		} else {
-			s["code"] = s["code"].(string) + ".SZ"
+	for {
+		res, err := http.Get(url)
+		if err != nil {
+			panic(err)
 		}
+		// 关闭连接
+		defer res.Body.Close()
+		// 读取内容
+		body, err := ioutil.ReadAll(res.Body)
+		str := json.Get(body, "data", "diff").ToString()
+		//改名
+		for i := range nameMaps {
+			str = strings.Replace(str, i+"\"", nameMaps[i]+"\"", -1)
+		}
+		// json解析
+		var temp []map[string]interface{}
+		err = json.Unmarshal([]byte(str), &temp)
+		for i := range temp {
+			s := temp[i]
+			//代码格式
+			if s["code"].(string)[0] == '0' {
+				s["code"] = s["code"].(string) + ".SH"
+			} else {
+				s["code"] = s["code"].(string) + ".SZ"
+			}
+		}
+		CNIndex = temp
+
+		for !marketime.IsOpen() {
+		}
+		time.Sleep(time.Second * 3)
 	}
-	CNIndex = temp
 }
 
 var MyChannel = make(chan bool)
@@ -186,41 +269,11 @@ var USChan = make(chan bool)
 // GoDownload 主下载函数
 func GoDownload() {
 	// 沪深股票
-	go func() {
-		for {
-			getCNStock()
-			for !marketime.IsOpen() {
-			}
-			// 更新完成后传入通道
-			MyChannel <- true
-			time.Sleep(time.Second * 1)
-		}
-	}()
+	go getCNStock()
 	// 美股股票
-	go func() {
-		for {
-			getUSStock()
-			USChan <- true
-			time.Sleep(time.Second * 60)
-		}
-	}()
+	go getUSStock()
 	// 香港股票
-	go func() {
-		for {
-			getHKStock()
-			HKChan <- true
-			time.Sleep(time.Second * 60)
-		}
-	}()
+	go getHKStock()
 	// 沪深指数
-	go func() {
-		for {
-			getIndex()
-			for !marketime.IsOpen() {
-			}
-			time.Sleep(time.Second * 3)
-		}
-	}()
-	// 求实时排行榜
-	go ranks(CNStock)
+	go getIndex()
 }
