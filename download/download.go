@@ -2,12 +2,8 @@ package download
 
 import (
 	"context"
-	"fmt"
 	jsoniter "github.com/json-iterator/go"
-	"go.mongodb.org/mongo-driver/mongo"
-	"go.mongodb.org/mongo-driver/mongo/options"
 	"io/ioutil"
-	"log"
 	"net/http"
 	"strings"
 	"test/marketime"
@@ -17,55 +13,15 @@ import (
 var ctx = context.Background()
 var json = jsoniter.ConfigCompatibleWithStandardLibrary
 
-// mongo
-var client = connectToMongo()
-
 var CNStock []map[string]interface{}
 var USStock []map[string]interface{}
 var HKStock []map[string]interface{}
 var CNIndex []map[string]interface{}
 
-// 连接mongoDB数据库
-func connectToMongo() *mongo.Client {
-	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
-	defer cancel()
-	client, err := mongo.Connect(ctx, options.Client().ApplyURI("mongodb://localhost:27017"))
-	if err != nil {
-		panic(err)
-	}
-	return client
-}
-
-// 写入mongo
-func writeToMongo(stocks []map[string]interface{}, marketType string) {
-	begin := time.Now()
-	collection := client.Database("stock").Collection(marketType)
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-
-	//var id []interface{}
-	var docs []interface{}
-	for _, item := range stocks {
-		item["_id"] = item["code"]
-		docs = append(docs, item)
-	}
-	//}
-	//	id = append(id, bson.M{"_id": item["code"]})
-	//	docs = append(docs, item)
-	//}
-	//更新
-	err := collection.Drop(ctx)
-	if err != nil {
-		log.Println(err)
-	}
-	_, err = collection.InsertMany(ctx, docs)
-	//_, err := collection.UpdateMany(ctx, id, docs)
-	if err != nil {
-		log.Println(err)
-	}
-	sl := time.Since(begin)
-	fmt.Println(sl)
-}
+// CNChan 通道
+var CNChan = make(chan bool)
+var HKChan = make(chan bool)
+var USChan = make(chan bool)
 
 /* 计算股票指标 */
 func setStockData(stocks []map[string]interface{}) {
@@ -109,11 +65,10 @@ func getCNStock() {
 	nameMaps := map[string]string{
 		"f2": "price", "f3": "pct_chg", "f5": "vol", "f6": "amount", "f7": "amp", "f15": "high", "f16": "low",
 		"f17": "open", "f12": "code", "f10": "量比", "f11": "5min涨幅", "f14": "name", "f18": "close",
-		"f22": "涨速", "f23": "pb", "f33": "委比",
-		//"f24": "60日涨幅", "f25": "年初至今涨跌幅",
+		"f22": "涨速", "f23": "pb", "f33": "委比", "f24": "60日涨幅", "f25": "年初至今涨跌幅",
 		"f34": "外盘", "f35": "内盘", "f38": "总股本", "f39": "流通股本", "f115": "pe_ttm",
 		// 财务
-		// "f37": "roe", "f40": "营收", "f41": "营收同比", "f45": "净利润", "f46": "净利润同比",
+		"f37": "roe", "f40": "营收", "f41": "营收同比", "f45": "净利润", "f46": "净利润同比",
 		// 资金
 		"f64": "特大单流入", "f65": "特大单流出",
 		"f70": "大单流入", "f71": "大单流出",
@@ -125,7 +80,6 @@ func getCNStock() {
 	}
 	//去掉末尾的逗号
 	url = url[:len(url)-1]
-
 	for {
 		// 从东方财富下载数据
 		res, err := http.Get(url)
@@ -148,19 +102,20 @@ func getCNStock() {
 		}
 		// 计算数据
 		setStockData(temp)
-		writeToMongo(temp, "CNStock")
-		// 更新完成后传入通道
-		MyChannel <- true
-		time.Sleep(time.Second * 1)
+		CNStock = temp
+		writeToMongo(CNStock, "CNStock")
 
+		// 更新完成后传入通道
+		CNChan <- true
 		for !marketime.IsOpen() {
 		}
+		time.Sleep(time.Second * 1)
 	}
 }
 
 /* 下载美股股票 */
 func getUSStock() {
-	url := "https://xueqiu.com/service/v5/stock/screener/quote/list?size=8000&order_by=amount&type=us"
+	url := "https://xueqiu.com/service/v5/stock/screener/quote/list?size=9000&order_by=amount&type=us"
 	// 从雪球下载数据
 	for {
 		res, err := http.Get(url)
@@ -175,13 +130,23 @@ func getUSStock() {
 		// json解析
 		var temp []map[string]interface{}
 		err = json.Unmarshal([]byte(str), &temp)
-		// 添加代码
+
+		// 数据删除
+		keys := []string{
+			"float_market_capital", "float_shares", "type", "lot_size", "total_percent", "first_percent", "symbol",
+			"has_follow", "issue_date_ts",
+		}
 		for _, item := range temp {
 			item["code"] = item["symbol"].(string) + ".US"
+			// 删除数据
+			for _, key := range keys {
+				delete(item, key)
+			}
 		}
-		writeToMongo(temp, "USStock")
-		//USChan <- true
-		//time.Sleep(time.Second * 60)
+		USStock = temp
+		writeToMongo(USStock, "USStock")
+		USChan <- true
+		time.Sleep(time.Second * 60)
 	}
 }
 
@@ -202,11 +167,19 @@ func getHKStock() {
 		// json解析
 		var temp []map[string]interface{}
 		err = json.Unmarshal([]byte(str), &temp)
-		// 添加代码
+		// 数据删除
+		keys := []string{
+			"type", "lot_size", "symbol", "has_follow", "issue_date_ts",
+		}
 		for _, item := range temp {
 			item["code"] = item["symbol"].(string) + ".HK"
+			// 删除数据
+			for _, key := range keys {
+				delete(item, key)
+			}
 		}
-		writeToMongo(temp, "HKStock")
+		HKStock = temp
+		writeToMongo(HKStock, "HKStock")
 		HKChan <- true
 		time.Sleep(time.Second * 60)
 	}
@@ -255,16 +228,11 @@ func getIndex() {
 			}
 		}
 		CNIndex = temp
-
 		for !marketime.IsOpen() {
 		}
 		time.Sleep(time.Second * 3)
 	}
 }
-
-var MyChannel = make(chan bool)
-var HKChan = make(chan bool)
-var USChan = make(chan bool)
 
 // GoDownload 主下载函数
 func GoDownload() {

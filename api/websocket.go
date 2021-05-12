@@ -51,7 +51,7 @@ func Detail(c *gin.Context) {
 
 	for marketime.IsOpen() {
 		// 阻塞
-		_ = <-download.MyChannel
+		_ = <-download.CNChan
 
 		newData := stock.GetStockList([]string{code})
 		// 相等则不写入，继续阻塞
@@ -89,7 +89,7 @@ func Simple(c *gin.Context) {
 
 	for marketime.IsOpen() {
 		// 阻塞
-		_ = <-download.MyChannel
+		_ = <-download.CNChan
 		//获取新数据
 		newData := stock.GetStockList(codes)
 		// 相等则不写入，继续阻塞
