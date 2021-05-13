@@ -50,7 +50,7 @@ func main() {
 		// 中国股市
 		if marketType == "CN" {
 			maps = map[string]interface{}{
-				"numbers":  stock.GetNumbers(),
+				"numbers":  download.GetNumbers("CN"),
 				"industry": stock.GetIndustryData("industry"),
 				"sw":       stock.GetIndustryData("sw"),
 				"area":     stock.GetIndustryData("area"),

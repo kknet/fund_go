@@ -103,8 +103,6 @@ func getCNStock() {
 		// 计算数据
 		setStockData(temp)
 		CNStock = temp
-		writeToMongo(CNStock, "CNStock")
-
 		// 更新完成后传入通道
 		CNChan <- true
 		for !marketime.IsOpen() {
@@ -144,7 +142,6 @@ func getUSStock() {
 			}
 		}
 		USStock = temp
-		writeToMongo(USStock, "USStock")
 		USChan <- true
 		time.Sleep(time.Second * 60)
 	}
@@ -179,7 +176,6 @@ func getHKStock() {
 			}
 		}
 		HKStock = temp
-		writeToMongo(HKStock, "HKStock")
 		HKChan <- true
 		time.Sleep(time.Second * 60)
 	}
@@ -244,4 +240,7 @@ func GoDownload() {
 	go getHKStock()
 	// 沪深指数
 	go getIndex()
+
+	GetNumbers("CN")
+	GetIndustry("CN")
 }

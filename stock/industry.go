@@ -39,18 +39,3 @@ func GetIndustryData(idsType string) []map[string]interface{} {
 	}
 	return results
 }
-
-// GetNumbers /* 获取涨跌排行 */
-func GetNumbers() map[string]interface{} {
-	label, err := rdb.LRange(ctx, "numbers:label", 0, -1).Result()
-	if err != nil {
-		panic(err)
-	}
-	value, err := rdb.LRange(ctx, "numbers:value", 0, -1).Result()
-	if err != nil {
-		panic(err)
-	}
-	return map[string]interface{}{
-		"label": label, "value": value,
-	}
-}

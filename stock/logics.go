@@ -29,7 +29,8 @@ type SourceData struct { // 东财json
 	} `json:"data"`
 }
 
-// GetDetailData /* 获取单只股票图表信息 */
+// GetDetailData
+// 获取单只股票图表信息
 func GetDetailData(code string) interface{} {
 	//最后一位
 	var market = "1"
@@ -147,7 +148,8 @@ func GetDetailData(code string) interface{} {
 	return mapData
 }
 
-// GetStockList /* 获取多只股票信息  */
+// GetStockList
+// 获取多只股票信息
 func GetStockList(codes []string) []map[string]interface{} {
 	// 设置最大数量
 	if len(codes) > 30 {
@@ -194,7 +196,8 @@ func GetStockList(codes []string) []map[string]interface{} {
 	return results
 }
 
-// Search /* 搜索股票 */
+// Search
+// 搜索股票
 func Search(input string, searchType string) []map[string]interface{} {
 	// 搜索目标
 	temp := download.CNStock
@@ -220,7 +223,8 @@ func Search(input string, searchType string) []map[string]interface{} {
 	return results
 }
 
-// GetNorthFlow /* 北向资金流向 */
+// GetNorthFlow
+// 北向资金流向
 func GetNorthFlow() {
 	url := "https://push2.eastmoney.com/api/qt/kamt.rtmin/get?fields1=f1,f3&fields2=f52,f54,f56"
 	res, err := http.Get(url)
