@@ -13,15 +13,8 @@ import (
 var ctx = context.Background()
 var json = jsoniter.ConfigCompatibleWithStandardLibrary
 
-var CNStock []map[string]interface{}
-var USStock []map[string]interface{}
-var HKStock []map[string]interface{}
-var CNIndex []map[string]interface{}
-
-// CNChan 通道
-var CNChan = make(chan bool)
-var HKChan = make(chan bool)
-var USChan = make(chan bool)
+// MyChan 通道
+var MyChan = make(chan bool)
 
 /* 计算股票指标 */
 func setStockData(stocks []map[string]interface{}) {
@@ -102,19 +95,18 @@ func getCNStock() {
 		}
 		// 计算数据
 		setStockData(temp)
-		CNStock = temp
+		err = writeToMongo(temp, "CN")
 		// 更新完成后传入通道
-		CNChan <- true
+		MyChan <- true
 		for !marketime.IsOpen() {
 		}
 		time.Sleep(time.Second * 1)
 	}
 }
 
-/* 下载美股股票 */
-func getUSStock() {
-	url := "https://xueqiu.com/service/v5/stock/screener/quote/list?size=9000&order_by=amount&type=us"
-	// 从雪球下载数据
+/* 从雪球下载数据 */
+func getXueQiuStock(marketType string) {
+	url := "https://xueqiu.com/service/v5/stock/screener/quote/list?size=9000&order_by=amount&type=" + marketType
 	for {
 		res, err := http.Get(url)
 		if err != nil {
@@ -131,57 +123,23 @@ func getUSStock() {
 
 		// 数据删除
 		keys := []string{
-			"float_market_capital", "float_shares", "type", "lot_size", "total_percent", "first_percent", "symbol",
-			"has_follow", "issue_date_ts",
+			"type", "lot_size", "symbol", "has_follow", "issue_date_ts", "tick_size",
 		}
 		for _, item := range temp {
-			item["code"] = item["symbol"].(string) + ".US"
+			// 修改代码
+			item["code"] = item["symbol"].(string) + "." + marketType
 			// 删除数据
 			for _, key := range keys {
 				delete(item, key)
 			}
 		}
-		USStock = temp
-		USChan <- true
-		time.Sleep(time.Second * 60)
+		err = writeToMongo(temp, marketType)
+		MyChan <- true
+		time.Sleep(time.Second * 3)
 	}
 }
 
-/* 下载香港股票 */
-func getHKStock() {
-	url := "https://xueqiu.com/service/v5/stock/screener/quote/list?size=4000&order_by=amount&type=hk"
-	// 从雪球下载数据
-	for {
-		res, err := http.Get(url)
-		if err != nil {
-			panic(err)
-		}
-		// 关闭连接
-		defer res.Body.Close()
-		// 读取内容
-		body, err := ioutil.ReadAll(res.Body)
-		str := json.Get(body, "data", "list").ToString()
-		// json解析
-		var temp []map[string]interface{}
-		err = json.Unmarshal([]byte(str), &temp)
-		// 数据删除
-		keys := []string{
-			"type", "lot_size", "symbol", "has_follow", "issue_date_ts",
-		}
-		for _, item := range temp {
-			item["code"] = item["symbol"].(string) + ".HK"
-			// 删除数据
-			for _, key := range keys {
-				delete(item, key)
-			}
-		}
-		HKStock = temp
-		HKChan <- true
-		time.Sleep(time.Second * 60)
-	}
-}
-
-/* 下载所有指数 */
+// getIndex 下载所有指数
 func getIndex() {
 	url := "https://push2.eastmoney.com/api/qt/clist/get?pn=1&pz=5000&po=1&np=1&fs=m:1+s:2,m:0+t:5"
 	url += "&fltt=2&fields="
@@ -223,7 +181,7 @@ func getIndex() {
 				s["code"] = s["code"].(string) + ".SZ"
 			}
 		}
-		CNIndex = temp
+		//err = writeToMongo(temp, "CN")
 		for !marketime.IsOpen() {
 		}
 		time.Sleep(time.Second * 3)
@@ -235,12 +193,9 @@ func GoDownload() {
 	// 沪深股票
 	go getCNStock()
 	// 美股股票
-	go getUSStock()
+	go getXueQiuStock("US")
 	// 香港股票
-	go getHKStock()
+	go getXueQiuStock("HK")
 	// 沪深指数
 	go getIndex()
-
-	GetNumbers("CN")
-	GetIndustry("CN")
 }

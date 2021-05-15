@@ -16,6 +16,8 @@ const ( // url前缀
 /* 主函数 */
 func main() {
 	// 下载
+	stock.GetNumbers("CN")
+	stock.GetIndustry("CN")
 	download.GoDownload()
 
 	r := gin.Default()
@@ -46,18 +48,9 @@ func main() {
 	// 市场页面聚合接口
 	r.GET(ApiUrl+"/stock/market", func(c *gin.Context) {
 		marketType := c.Query("marketType")
-		var maps map[string]interface{}
-		// 中国股市
-		if marketType == "CN" {
-			maps = map[string]interface{}{
-				"numbers":  download.GetNumbers("CN"),
-				"industry": stock.GetIndustryData("industry"),
-				"sw":       stock.GetIndustryData("sw"),
-				"area":     stock.GetIndustryData("area"),
-			}
-		}
+		data := stock.GetIndustry(marketType)
 		c.JSON(200, gin.H{
-			"status": true, "data": maps,
+			"status": true, "data": data,
 		})
 	})
 
@@ -65,14 +58,6 @@ func main() {
 		input := c.Query("input")
 		searchType := c.Query("type")
 		data := stock.Search(input, searchType)
-		c.JSON(200, gin.H{
-			"status": true, "data": data,
-		})
-	})
-
-	// 市场云图
-	r.GET(ApiUrl+"/stock/cloud", func(c *gin.Context) {
-		data := stock.GetCloudMap()
 		c.JSON(200, gin.H{
 			"status": true, "data": data,
 		})

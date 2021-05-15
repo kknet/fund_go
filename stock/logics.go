@@ -1,12 +1,14 @@
 package stock
 
 import (
+	"context"
 	"fmt"
 	jsoniter "github.com/json-iterator/go"
+	"go.mongodb.org/mongo-driver/bson"
 	"io/ioutil"
 	"net/http"
 	"strings"
-	"test/download"
+	"test/myMongo"
 )
 
 const (
@@ -15,6 +17,7 @@ const (
 
 // jsoniter
 var json = jsoniter.ConfigCompatibleWithStandardLibrary
+var ctx = context.Background()
 
 type SourceData struct { // 东财json
 	Data struct {
@@ -150,48 +153,20 @@ func GetDetailData(code string) interface{} {
 
 // GetStockList
 // 获取多只股票信息
-func GetStockList(codes []string) []map[string]interface{} {
-	// 设置最大数量
-	if len(codes) > 30 {
-		return []map[string]interface{}{}
-	}
+func GetStockList(codes []string) []bson.M {
 	// 初始化
-	results := make([]map[string]interface{}, 0)
-	// 临时变量
-	var item map[string]interface{}
+	var results []bson.M
+
+	var db = client.Database("stock")
 
 	for _, code := range codes {
 		// 沪深代码
 		if strings.Contains(code, ".S") {
-			// 股票
-			for _, item = range download.CNStock {
-				if item["code"] == code {
-					goto App
-				}
-			}
-			// 指数
-			for _, item = range download.CNIndex {
-				if item["code"] == code {
-					goto App
-				}
-			}
-			// HK代码
-		} else if len(code) == 5 {
-			for _, item = range download.HKStock {
-				if item["code"] == code {
-					goto App
-				}
-			}
-			// US代码
-		} else {
-			for _, item = range download.USStock {
-				if item["code"] == code {
-					goto App
-				}
-			}
+			coll := db.Collection("CNStock")
+			res, _ := coll.Find(ctx, bson.M{"_id": code})
+
+			results = append(results, myMongo.Read(res))
 		}
-	App:
-		results = append(results, item)
 	}
 	return results
 }
@@ -200,26 +175,26 @@ func GetStockList(codes []string) []map[string]interface{} {
 // 搜索股票
 func Search(input string, searchType string) []map[string]interface{} {
 	// 搜索目标
-	temp := download.CNStock
-	if searchType == "index" {
-		temp = download.CNIndex
-	}
-
+	//temp := download.CNStock
+	//if searchType == "index" {
+	//	temp = download.CNIndex
+	//}
+	//
 	results := make([]map[string]interface{}, 0)
-	for _, item := range temp {
-		// 搜索前10只
-		if len(results) > 10 {
-			break
-		}
-		// 匹配字符串
-		res := strings.Contains(item["code"].(string)+item["name"].(string), input)
-		if res {
-			maps := map[string]interface{}{
-				"code": item["code"], "name": item["name"], "price": item["price"], "pct_chg": item["pct_chg"],
-			}
-			results = append(results, maps)
-		}
-	}
+	//for _, item := range temp {
+	//	搜索前10只
+	//if len(results) > 10 {
+	//	break
+	//}
+	//匹配字符串
+	//res := strings.Contains(item["code"].(string)+item["name"].(string), input)
+	//if res {
+	//	maps := map[string]interface{}{
+	//		"code": item["code"], "name": item["name"], "price": item["price"], "pct_chg": item["pct_chg"],
+	//	}
+	//	results = append(results, maps)
+	//}
+	//}
 	return results
 }
 
