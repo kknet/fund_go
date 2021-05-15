@@ -15,6 +15,7 @@ var client = myMongo.ConnectMongo()
 // GetNumbers 获取涨跌分布
 func GetNumbers(marketType string) []bson.M {
 	coll := client.Database("stock").Collection(marketType + "Stock")
+
 	// label 条件搜索
 	label := []string{"跌停", "<7", "7-5", "5-3", "3-0", "0", "0-3", "3-5", "5-7", ">7", "涨停"}
 	value := []bson.M{
@@ -31,12 +32,19 @@ func GetNumbers(marketType string) []bson.M {
 		{"委比": bson.M{"$eq": 100}},
 	}
 
+	if marketType != "CN" {
+		label[0] = "<10"
+		label[10] = ">10"
+
+		value[0] = bson.M{"pct_chg": bson.M{"$lt": -10}}
+		value[10] = bson.M{"pct_chg": bson.M{"$gt": 10}}
+	}
+
 	opts := options.Aggregate().SetMaxTime(2 * time.Second)
 
 	var results []bson.M
 	for i := range label {
 		pip := mongo.Pipeline{
-			{{"$match", value[i]}},
 			{{"$group", bson.M{"_id": label[i], "total": bson.M{"$sum": 1}}}},
 		}
 		cursor, err := coll.Aggregate(context.TODO(), pip, opts)

@@ -2,6 +2,7 @@ package main
 
 import (
 	"github.com/gin-gonic/gin"
+	"go.mongodb.org/mongo-driver/bson"
 	"strings"
 	"test/api"
 	"test/download"
@@ -48,9 +49,11 @@ func main() {
 	// 市场页面聚合接口
 	r.GET(ApiUrl+"/stock/market", func(c *gin.Context) {
 		marketType := c.Query("marketType")
-		data := stock.GetIndustry(marketType)
 		c.JSON(200, gin.H{
-			"status": true, "data": data,
+			"status": true, "data": bson.M{
+				"numbers":  stock.GetNumbers(marketType),
+				"industry": stock.GetIndustry(marketType),
+			},
 		})
 	})
 

@@ -7,7 +7,6 @@ import (
 	"go.mongodb.org/mongo-driver/bson"
 	"io/ioutil"
 	"net/http"
-	"strings"
 	"test/myMongo"
 )
 
@@ -154,20 +153,13 @@ func GetDetailData(code string) interface{} {
 // GetStockList
 // 获取多只股票信息
 func GetStockList(codes []string) []bson.M {
-	// 初始化
-	var results []bson.M
 
-	var db = client.Database("stock")
+	coll := client.Database("stock").Collection("CNStock")
 
-	for _, code := range codes {
-		// 沪深代码
-		if strings.Contains(code, ".S") {
-			coll := db.Collection("CNStock")
-			res, _ := coll.Find(ctx, bson.M{"_id": code})
+	// 使用mongo $in操作符
+	res, _ := coll.Find(ctx, bson.M{"_id": bson.M{"$in": codes}})
 
-			results = append(results, myMongo.Read(res))
-		}
-	}
+	results := myMongo.ReadMany(res)
 	return results
 }
 
@@ -198,8 +190,7 @@ func Search(input string, searchType string) []map[string]interface{} {
 	return results
 }
 
-// GetNorthFlow
-// 北向资金流向
+// GetNorthFlow 北向资金流向
 func GetNorthFlow() {
 	url := "https://push2.eastmoney.com/api/qt/kamt.rtmin/get?fields1=f1,f3&fields2=f52,f54,f56"
 	res, err := http.Get(url)
