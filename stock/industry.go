@@ -1,6 +1,7 @@
 package stock
 
 import (
+	"fmt"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/mongo"
 	"log"
@@ -26,35 +27,36 @@ func GetNumbers(marketType string) []bson.M {
 		{"pct_chg": bson.M{"$gt": 7}},
 		{"委比": bson.M{"$eq": 100}},
 	}
-
 	if marketType != "CN" {
 		label[0] = "<10"
 		label[10] = ">10"
-
 		value[0] = bson.M{"pct_chg": bson.M{"$lt": -10}}
 		value[10] = bson.M{"pct_chg": bson.M{"$gt": 10}}
 	}
-
 	var results []bson.M
+	var temp []bson.M
+
 	for i := range label {
-		// matchStage := bson.D{{"$match", []bson.E{{"weight", bson.D{{"$gt", 30}}}}}}
-		pip := bson.D{
+		matchStage := bson.D{{"$match", value[i]}}
+		groupStage := bson.D{
 			{"$group", bson.M{"_id": label[i], "total": bson.M{"$sum": 1}}},
 		}
-		err := coll.Aggregate(ctx, mongo.Pipeline{pip}).All(results)
+		err := coll.Aggregate(ctx, mongo.Pipeline{matchStage, groupStage}).All(&temp)
 		if err != nil {
 			log.Fatal(err)
 		}
+		fmt.Println(temp)
+		results = append(results, temp[0])
 	}
 	return results
 }
 
 // GetIndustry 获取板块行情 marketType = CN,HK,US
 func GetIndustry(marketType string) []bson.M {
+	matchStage := bson.D{{"$match", bson.M{"marketType": marketType}}}
 	groupStage := bson.D{
 		{"$group", bson.M{
-			"_id":     "$marketType",
-			"times":   bson.M{"$sum": 1},
+			"_id":     "$pct_chg",
 			"总市值":     bson.M{"$sum": "$总市值"},
 			"vol":     bson.M{"$sum": "$vol"},
 			"amount":  bson.M{"$sum": "$amount"},
@@ -63,7 +65,7 @@ func GetIndustry(marketType string) []bson.M {
 		}},
 	}
 	var results []bson.M
-	err := coll.Aggregate(ctx, mongo.Pipeline{groupStage}).All(results)
+	err := coll.Aggregate(ctx, mongo.Pipeline{matchStage, groupStage}).All(&results)
 	if err != nil {
 		log.Fatal(err)
 	}

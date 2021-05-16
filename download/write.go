@@ -1,15 +1,18 @@
 package download
 
 import (
+	"fmt"
 	"go.mongodb.org/mongo-driver/bson"
 	"log"
 	"test/myMongo"
+	"time"
 )
 
 var coll = myMongo.ConnectMongo()
 
 // 更新数据
 func writeToMongo(stock []bson.M) {
+	start := time.Now()
 	err := insertToMongo(stock)
 
 	var filter []bson.M
@@ -22,6 +25,7 @@ func writeToMongo(stock []bson.M) {
 	if err != nil {
 		log.Println(err)
 	}
+	fmt.Println(time.Since(start))
 }
 
 // 初始化插入
