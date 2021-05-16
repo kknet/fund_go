@@ -7,8 +7,7 @@ import (
 	"go.mongodb.org/mongo-driver/bson"
 	"io/ioutil"
 	"net/http"
-	"strings"
-	"test/download"
+	"test/myMongo"
 )
 
 const (
@@ -152,27 +151,15 @@ func GetDetailData(code string) interface{} {
 
 // GetStockList 获取多只股票信息
 func GetStockList(codes []string) []bson.M {
-	var target []bson.M
-	var marketType string
-	results := make([]bson.M, 0)
-
-	for _, code := range codes {
-		marketType = strings.Split(code, ".")[1]
-		// 沪深
-		if marketType == "SH" || marketType == "SZ" {
-			target = download.CNStock
-		} else if marketType == "HK" {
-			target = download.HKStock
-		} else {
-			target = download.USStock
-		}
-		for _, item := range target {
-			if item["code"] == code {
-				results = append(results, item)
-				break
-			}
-		}
+	coll := client.Database("stock").Collection("AllStock")
+	// 超过长度限制
+	if len(codes) > 50 {
+		return []bson.M{}
 	}
+
+	cur, _ := coll.Find(ctx, bson.M{"_id": bson.M{"$in": codes}})
+	results := myMongo.ReadMany(cur)
+
 	return results
 }
 

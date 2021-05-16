@@ -11,10 +11,10 @@ import (
 var client = myMongo.ConnectMongo()
 
 // 更新数据
-func writeToMongo(stock []bson.M, marketType string) {
-	coll := client.Database("stock").Collection(marketType + "Stock")
+func writeToMongo(stock []bson.M) {
+	coll := client.Database("stock").Collection("AllStock")
 
-	err := insertToMongo(stock, marketType)
+	err := insertToMongo(stock)
 
 	var filter []bson.M
 	var update []bson.M
@@ -28,12 +28,12 @@ func writeToMongo(stock []bson.M, marketType string) {
 	if err != nil {
 		log.Println(err)
 	}
-	fmt.Println(marketType, "写入成功,用时：", time.Since(start))
+	fmt.Println("写入成功,用时：", time.Since(start))
 }
 
 // 初始化插入
-func insertToMongo(stock []bson.M, marketType string) error {
-	coll := client.Database("stock").Collection(marketType + "Stock")
+func insertToMongo(stock []bson.M) error {
+	coll := client.Database("stock").Collection("AllStock")
 
 	var docs []interface{}
 	for _, item := range stock {
@@ -45,6 +45,6 @@ func insertToMongo(stock []bson.M, marketType string) error {
 	if err != nil {
 		return err
 	}
-	fmt.Println(marketType, "初始化成功,用时：", time.Since(start))
+	fmt.Println("初始化成功,用时：", time.Since(start))
 	return nil
 }

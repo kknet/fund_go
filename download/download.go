@@ -14,11 +14,6 @@ import (
 var ctx = context.Background()
 var json = jsoniter.ConfigCompatibleWithStandardLibrary
 
-// CNStock 储存所有股票实时数据
-var CNStock []bson.M
-var HKStock []bson.M
-var USStock []bson.M
-
 // MyChan 通道
 var MyChan = make(chan bool)
 
@@ -31,6 +26,8 @@ func setStockData(stocks []bson.M) {
 		} else {
 			s["code"] = s["code"].(string) + ".SZ"
 		}
+		// 添加市场
+		s["marketType"] = "CN"
 		// 单位 万
 		labels := []string{"总股本", "流通股本", "特大单流入", "特大单流出", "大单流入", "大单流出", "中单净流入", "小单净流入"}
 		for i := range labels {
@@ -43,6 +40,10 @@ func setStockData(stocks []bson.M) {
 		s["主力流入"] = s["大单流入"].(float64) + s["特大单流入"].(float64)
 		s["主力流出"] = s["大单流出"].(float64) + s["特大单流出"].(float64)
 		s["主力净流入"] = s["主力流入"].(float64) - s["主力流出"].(float64)
+		delete(s, "大单流入")
+		delete(s, "大单流出")
+		delete(s, "特大单流入")
+		delete(s, "特大单流出")
 		// 市值
 		s["总市值"] = s["price"].(float64) * s["总股本"].(float64) / 10000
 		s["流通市值"] = s["price"].(float64) * s["流通股本"].(float64) / 10000
@@ -101,11 +102,9 @@ func getCNStock() {
 		}
 		// 计算数据
 		setStockData(temp)
-		CNStock = temp
+		writeToMongo(temp)
 		// 更新完成后传入通道
 		MyChan <- true
-
-		writeToMongo(temp, "CN")
 		for !marketime.IsOpen() {
 		}
 		time.Sleep(time.Second * 1)
@@ -132,24 +131,20 @@ func getXueQiuStock(marketType string) {
 		}
 		// 数据删除
 		keys := []string{
-			"type", "lot_size", "symbol", "has_follow", "issue_date_ts", "tick_size",
+			"type", "lot_size", "symbol", "has_follow", "issue_date_ts", "tick_size", "followers",
 		}
 		for _, item := range temp {
 			// 修改代码
 			item["code"] = item["symbol"].(string) + "." + marketType
+			// 添加市场
+			item["marketType"] = marketType
 			// 删除数据
 			for _, key := range keys {
 				delete(item, key)
 			}
 		}
-		if marketType == "HK" {
-			HKStock = temp
-		} else {
-			USStock = temp
-		}
+		writeToMongo(temp)
 		MyChan <- true
-
-		writeToMongo(temp, marketType)
 		time.Sleep(time.Second * 3)
 	}
 }
