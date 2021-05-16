@@ -12,7 +12,7 @@ import (
 
 var client = myMongo.ConnectMongo()
 
-// GetNumbers 获取涨跌分布
+// GetNumbers 获取涨跌分布 marketType = CN,HK,US
 func GetNumbers(marketType string) []bson.M {
 	coll := client.Database("stock").Collection(marketType + "Stock")
 
@@ -56,7 +56,7 @@ func GetNumbers(marketType string) []bson.M {
 	return results
 }
 
-// GetIndustry 获取板块行情
+// GetIndustry 获取板块行情 marketType = CN,HK,US
 func GetIndustry(marketType string) []bson.M {
 	coll := client.Database("stock").Collection(marketType + "Stock")
 

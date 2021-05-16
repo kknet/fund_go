@@ -3,6 +3,7 @@ package download
 import (
 	"context"
 	jsoniter "github.com/json-iterator/go"
+	"go.mongodb.org/mongo-driver/bson"
 	"io/ioutil"
 	"net/http"
 	"strings"
@@ -13,11 +14,16 @@ import (
 var ctx = context.Background()
 var json = jsoniter.ConfigCompatibleWithStandardLibrary
 
+// CNStock 储存所有股票实时数据
+var CNStock []bson.M
+var HKStock []bson.M
+var USStock []bson.M
+
 // MyChan 通道
 var MyChan = make(chan bool)
 
 /* 计算股票指标 */
-func setStockData(stocks []map[string]interface{}) {
+func setStockData(stocks []bson.M) {
 	for _, s := range stocks {
 		//代码格式
 		if s["code"].(string)[0] == '6' {
@@ -89,22 +95,24 @@ func getCNStock() {
 			str = strings.Replace(str, i+"\"", nameMaps[i]+"\"", -1)
 		}
 		// json解析
-		var temp []map[string]interface{}
+		var temp []bson.M
 		if err = json.Unmarshal([]byte(str), &temp); err != nil {
 			panic(err)
 		}
 		// 计算数据
 		setStockData(temp)
-		err = writeToMongo(temp, "CN")
+		CNStock = temp
 		// 更新完成后传入通道
 		MyChan <- true
+
+		writeToMongo(temp, "CN")
 		for !marketime.IsOpen() {
 		}
 		time.Sleep(time.Second * 1)
 	}
 }
 
-/* 从雪球下载数据 */
+// getXueQiuStock 从雪球下载数据
 func getXueQiuStock(marketType string) {
 	url := "https://xueqiu.com/service/v5/stock/screener/quote/list?size=9000&order_by=amount&type=" + marketType
 	for {
@@ -118,9 +126,10 @@ func getXueQiuStock(marketType string) {
 		body, err := ioutil.ReadAll(res.Body)
 		str := json.Get(body, "data", "list").ToString()
 		// json解析
-		var temp []map[string]interface{}
-		err = json.Unmarshal([]byte(str), &temp)
-
+		var temp []bson.M
+		if err = json.Unmarshal([]byte(str), &temp); err != nil {
+			panic(err)
+		}
 		// 数据删除
 		keys := []string{
 			"type", "lot_size", "symbol", "has_follow", "issue_date_ts", "tick_size",
@@ -133,20 +142,26 @@ func getXueQiuStock(marketType string) {
 				delete(item, key)
 			}
 		}
-		err = writeToMongo(temp, marketType)
+		if marketType == "HK" {
+			HKStock = temp
+		} else {
+			USStock = temp
+		}
 		MyChan <- true
+
+		writeToMongo(temp, marketType)
 		time.Sleep(time.Second * 3)
 	}
 }
 
-// getIndex 下载所有指数
+// getIndex 下载所有沪深指数
 func getIndex() {
 	url := "https://push2.eastmoney.com/api/qt/clist/get?pn=1&pz=5000&po=1&np=1&fs=m:1+s:2,m:0+t:5"
 	url += "&fltt=2&fields="
 	// 重命名
 	nameMaps := map[string]string{
 		"f2": "price", "f3": "pct_chg", "f4": "change", "f5": "vol", "f6": "amount", "f7": "amp", "f8": "换手率",
-		"f14": "name", "f15": "high", "f16": "low", "f17": "open", "f18": "close", "f12": "code", "f11": "5min涨幅",
+		"f14": "name", "f15": "high", "f16": "low", "f17": "open", "f18": "close", "f12": "code",
 	}
 	//连接参数
 	for i := range nameMaps {
@@ -181,7 +196,6 @@ func getIndex() {
 				s["code"] = s["code"].(string) + ".SZ"
 			}
 		}
-		//err = writeToMongo(temp, "CN")
 		for !marketime.IsOpen() {
 		}
 		time.Sleep(time.Second * 3)

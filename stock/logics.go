@@ -7,7 +7,8 @@ import (
 	"go.mongodb.org/mongo-driver/bson"
 	"io/ioutil"
 	"net/http"
-	"test/myMongo"
+	"strings"
+	"test/download"
 )
 
 const (
@@ -18,7 +19,7 @@ const (
 var json = jsoniter.ConfigCompatibleWithStandardLibrary
 var ctx = context.Background()
 
-type SourceData struct { // 东财json
+type SourceData struct {
 	Data struct {
 		Data []struct {
 			Time    int     `json:"t"`
@@ -31,8 +32,7 @@ type SourceData struct { // 东财json
 	} `json:"data"`
 }
 
-// GetDetailData
-// 获取单只股票图表信息
+// GetDetailData 获取单只股票图表信息
 func GetDetailData(code string) interface{} {
 	//最后一位
 	var market = "1"
@@ -54,12 +54,12 @@ func GetDetailData(code string) interface{} {
 	err = json.Unmarshal(body, info)
 
 	//实时分笔数据（12条）
-	fenbi := make([]map[string]interface{}, 12)
+	fenbi := make([]bson.M, 12)
 	length := len(info.Data.Data)
 
 	for i := range fenbi {
 		p := &info.Data.Data[length-12+i]
-		fenbi[i] = map[string]interface{}{"time": p.Time, "price": p.Price / 1000, "vol": p.Vol, "type": p.Type}
+		fenbi[i] = bson.M{"time": p.Time, "price": p.Price / 1000, "vol": p.Vol, "type": p.Type}
 	}
 
 	allLength := 0
@@ -140,8 +140,8 @@ func GetDetailData(code string) interface{} {
 	avg = append(avg, avg[i])
 
 	// 字典类型
-	mapData := map[string]interface{}{
-		"chart": map[string]interface{}{
+	mapData := bson.M{
+		"chart": bson.M{
 			"times": times, "price": price, "vol": vol, "avg": avg, "zhudong": zhudong,
 		},
 		"ticks": fenbi,
@@ -150,29 +150,41 @@ func GetDetailData(code string) interface{} {
 	return mapData
 }
 
-// GetStockList
-// 获取多只股票信息
+// GetStockList 获取多只股票信息
 func GetStockList(codes []string) []bson.M {
+	var target []bson.M
+	var marketType string
+	results := make([]bson.M, 0)
 
-	coll := client.Database("stock").Collection("CNStock")
-
-	// 使用mongo $in操作符
-	res, _ := coll.Find(ctx, bson.M{"_id": bson.M{"$in": codes}})
-
-	results := myMongo.ReadMany(res)
+	for _, code := range codes {
+		marketType = strings.Split(code, ".")[1]
+		// 沪深
+		if marketType == "SH" || marketType == "SZ" {
+			target = download.CNStock
+		} else if marketType == "HK" {
+			target = download.HKStock
+		} else {
+			target = download.USStock
+		}
+		for _, item := range target {
+			if item["code"] == code {
+				results = append(results, item)
+				break
+			}
+		}
+	}
 	return results
 }
 
-// Search
-// 搜索股票
-func Search(input string, searchType string) []map[string]interface{} {
+// Search 搜索股票
+func Search(input string, searchType string) []bson.M {
 	// 搜索目标
 	//temp := download.CNStock
 	//if searchType == "index" {
 	//	temp = download.CNIndex
 	//}
 	//
-	results := make([]map[string]interface{}, 0)
+	results := make([]bson.M, 0)
 	//for _, item := range temp {
 	//	搜索前10只
 	//if len(results) > 10 {

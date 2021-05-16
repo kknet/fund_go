@@ -17,8 +17,8 @@ const ( // url前缀
 /* 主函数 */
 func main() {
 	// 下载
-	stock.GetNumbers("CN")
-	stock.GetIndustry("CN")
+	//stock.GetNumbers("CN")
+	//stock.GetIndustry("CN")
 	download.GoDownload()
 
 	r := gin.Default()

@@ -2,6 +2,7 @@ package download
 
 import (
 	"fmt"
+	"go.mongodb.org/mongo-driver/bson"
 	"log"
 	"test/myMongo"
 	"time"
@@ -9,29 +10,41 @@ import (
 
 var client = myMongo.ConnectMongo()
 
-// 将下载的数据写入mongo
-func writeToMongo(stock []map[string]interface{}, marketType string) error {
-
+// 更新数据
+func writeToMongo(stock []bson.M, marketType string) {
 	coll := client.Database("stock").Collection(marketType + "Stock")
-	err := coll.Drop(ctx)
+
+	err := insertToMongo(stock, marketType)
+
+	var filter []bson.M
+	var update []bson.M
+	for _, item := range stock {
+		filter = append(filter, bson.M{"_id": item["code"]})
+		update = append(update, bson.M{"$set": item})
+	}
+
+	start := time.Now()
+	_, err = coll.UpdateMany(ctx, bson.M{"_id": bson.M{"$in": filter}}, update)
 	if err != nil {
 		log.Println(err)
-		return err
 	}
+	fmt.Println(marketType, "写入成功,用时：", time.Since(start))
+}
+
+// 初始化插入
+func insertToMongo(stock []bson.M, marketType string) error {
+	coll := client.Database("stock").Collection(marketType + "Stock")
 
 	var docs []interface{}
 	for _, item := range stock {
 		item["_id"] = item["code"]
 		docs = append(docs, item)
 	}
-
 	start := time.Now()
-	_, err = coll.InsertMany(ctx, docs)
+	_, err := coll.InsertMany(ctx, docs)
 	if err != nil {
-		log.Println(err)
 		return err
 	}
-
-	fmt.Println(marketType, "写入成功,用时：", time.Since(start))
+	fmt.Println(marketType, "初始化成功,用时：", time.Since(start))
 	return nil
 }
