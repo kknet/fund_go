@@ -113,7 +113,7 @@ func getCNStock() {
 
 // getXueQiuStock 从雪球下载数据
 func getXueQiuStock(marketType string) {
-	url := "https://xueqiu.com/service/v5/stock/screener/quote/list?size=9000&order_by=amount&type=" + marketType
+	url := "https://xueqiu.com/service/v5/stock/screener/quote/list?size=8000&order_by=amount&type=" + marketType
 	for {
 		res, err := http.Get(url)
 		if err != nil {
@@ -180,7 +180,7 @@ func getIndex() {
 			str = strings.Replace(str, i+"\"", nameMaps[i]+"\"", -1)
 		}
 		// json解析
-		var temp []map[string]interface{}
+		var temp []bson.M
 		err = json.Unmarshal([]byte(str), &temp)
 		for i := range temp {
 			s := temp[i]
@@ -190,7 +190,9 @@ func getIndex() {
 			} else {
 				s["code"] = s["code"].(string) + ".SZ"
 			}
+			s["marketType"] = "Index"
 		}
+		writeToMongo(temp)
 		for !marketime.IsOpen() {
 		}
 		time.Sleep(time.Second * 3)

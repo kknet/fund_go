@@ -6,8 +6,8 @@ import (
 	jsoniter "github.com/json-iterator/go"
 	"go.mongodb.org/mongo-driver/bson"
 	"io/ioutil"
+	"log"
 	"net/http"
-	"test/myMongo"
 )
 
 const (
@@ -144,48 +144,29 @@ func GetDetailData(code string) interface{} {
 			"times": times, "price": price, "vol": vol, "avg": avg, "zhudong": zhudong,
 		},
 		"ticks": fenbi,
-		"items": GetStockList([]string{code})[0],
+		"items": GetStockList([]string{code}),
 	}
 	return mapData
 }
 
 // GetStockList 获取多只股票信息
 func GetStockList(codes []string) []bson.M {
-	coll := client.Database("stock").Collection("AllStock")
-	// 超过长度限制
-	if len(codes) > 50 {
-		return []bson.M{}
+	var results []bson.M
+	err := coll.Find(ctx, bson.M{"_id": bson.M{"$in": codes}}).Limit(20).All(&results)
+	if err != nil {
+		log.Println(err)
 	}
-
-	cur, _ := coll.Find(ctx, bson.M{"_id": bson.M{"$in": codes}})
-	results := myMongo.ReadMany(cur)
-
 	return results
 }
 
 // Search 搜索股票
 func Search(input string, searchType string) []bson.M {
-	// 搜索目标
-	//temp := download.CNStock
-	//if searchType == "index" {
-	//	temp = download.CNIndex
-	//}
-	//
-	results := make([]bson.M, 0)
-	//for _, item := range temp {
-	//	搜索前10只
-	//if len(results) > 10 {
-	//	break
-	//}
-	//匹配字符串
-	//res := strings.Contains(item["code"].(string)+item["name"].(string), input)
-	//if res {
-	//	maps := map[string]interface{}{
-	//		"code": item["code"], "name": item["name"], "price": item["price"], "pct_chg": item["pct_chg"],
-	//	}
-	//	results = append(results, maps)
-	//}
-	//}
+	var results []bson.M
+	err := coll.Find(ctx, bson.M{"_id": bson.M{"$regex": input}}).Limit(20).All(&results)
+	if err != nil {
+		log.Println(err)
+	}
+	fmt.Println(results)
 	return results
 }
 

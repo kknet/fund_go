@@ -9,6 +9,7 @@ require (
 	github.com/json-iterator/go v1.1.11
 	github.com/kr/pretty v0.1.0 // indirect
 	github.com/mattn/go-sqlite3 v1.14.7 // indirect
+	github.com/qiniu/qmgo v0.9.4 // indirect
 	go.mongodb.org/mongo-driver v1.5.2 // indirect
 	golang.org/x/text v0.3.5 // indirect
 	gopkg.in/check.v1 v1.0.0-20180628173108-788fd7840127 // indirect

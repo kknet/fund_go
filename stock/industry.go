@@ -1,21 +1,16 @@
 package stock
 
 import (
-	"context"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/mongo"
-	"go.mongodb.org/mongo-driver/mongo/options"
 	"log"
 	"test/myMongo"
-	"time"
 )
 
-var client = myMongo.ConnectMongo()
+var coll = myMongo.ConnectMongo()
 
 // GetNumbers 获取涨跌分布 marketType = CN,HK,US
 func GetNumbers(marketType string) []bson.M {
-	coll := client.Database("stock").Collection(marketType + "Stock")
-
 	// label 条件搜索
 	label := []string{"跌停", "<7", "7-5", "5-3", "3-0", "0", "0-3", "3-5", "5-7", ">7", "涨停"}
 	value := []bson.M{
@@ -40,29 +35,25 @@ func GetNumbers(marketType string) []bson.M {
 		value[10] = bson.M{"pct_chg": bson.M{"$gt": 10}}
 	}
 
-	opts := options.Aggregate().SetMaxTime(2 * time.Second)
-
 	var results []bson.M
 	for i := range label {
-		pip := mongo.Pipeline{
-			{{"$group", bson.M{"_id": label[i], "total": bson.M{"$sum": 1}}}},
+		// matchStage := bson.D{{"$match", []bson.E{{"weight", bson.D{{"$gt", 30}}}}}}
+		pip := bson.D{
+			{"$group", bson.M{"_id": label[i], "total": bson.M{"$sum": 1}}},
 		}
-		cursor, err := coll.Aggregate(context.TODO(), pip, opts)
+		err := coll.Aggregate(ctx, mongo.Pipeline{pip}).All(results)
 		if err != nil {
 			log.Fatal(err)
 		}
-		results = append(results, myMongo.Read(cursor))
 	}
 	return results
 }
 
 // GetIndustry 获取板块行情 marketType = CN,HK,US
 func GetIndustry(marketType string) []bson.M {
-	coll := client.Database("stock").Collection(marketType + "Stock")
-
 	groupStage := bson.D{
 		{"$group", bson.M{
-			"_id":     "$pct_chg",
+			"_id":     "$marketType",
 			"times":   bson.M{"$sum": 1},
 			"总市值":     bson.M{"$sum": "$总市值"},
 			"vol":     bson.M{"$sum": "$vol"},
@@ -71,12 +62,10 @@ func GetIndustry(marketType string) []bson.M {
 			"领涨股":     bson.M{"$first": "$name"},
 		}},
 	}
-	opts := options.Aggregate().SetMaxTime(2 * time.Second)
-	cursor, err := coll.Aggregate(context.TODO(), mongo.Pipeline{groupStage}, opts)
+	var results []bson.M
+	err := coll.Aggregate(ctx, mongo.Pipeline{groupStage}).All(results)
 	if err != nil {
 		log.Fatal(err)
 	}
-
-	results := myMongo.ReadMany(cursor)
 	return results
 }
