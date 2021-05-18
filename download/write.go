@@ -24,6 +24,8 @@ func writeToMongo(stock []bson.M) {
 		//update = append(update, bson.M{"$set": item})
 	}
 	//_, err = coll.UpdateAll(ctx, bson.M{"_id": bson.M{"$in": filter}}, update)
+	//if err != nil {
+	//}
 	fmt.Println(time.Since(start))
 }
 

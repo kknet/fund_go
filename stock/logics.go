@@ -152,7 +152,7 @@ func GetDetailData(code string) interface{} {
 // GetStockList 获取多只股票信息
 func GetStockList(codes []string) []bson.M {
 	var results []bson.M
-	err := coll.Find(ctx, bson.M{"_id": bson.M{"$in": codes}}).Limit(20).All(&results)
+	err := coll.Find(ctx, bson.M{"_id": bson.M{"$in": codes}}).Limit(30).All(&results)
 	if err != nil {
 		log.Println(err)
 	}
@@ -163,9 +163,12 @@ func GetStockList(codes []string) []bson.M {
 func Search(input string, searchType string) []bson.M {
 	var results []bson.M
 
-	match := bson.M{"_id": bson.M{"$regex": input}}
+	match := bson.M{"$or": bson.A{
+		bson.M{"_id": bson.M{"$regex": input, "$options": "i"}},
+		bson.M{"name": bson.M{"$regex": input, "$options": "i"}},
+	}}
 	// 按成交量排序
-	err := coll.Find(ctx, match).Limit(20).All(&results)
+	err := coll.Find(ctx, match).Limit(10).All(&results)
 	if err != nil {
 		log.Println(err)
 	}
@@ -189,7 +192,7 @@ func GetNorthFlow() {
 // GetRank 全市场排行
 func GetRank(marketType string) []bson.M {
 	var results []bson.M
-	err := coll.Find(context.Background(), bson.M{"marketType": marketType}).Sort("amount").Limit(20).All(&results)
+	err := coll.Find(ctx, bson.M{"marketType": marketType}).Limit(20).All(&results)
 	if err != nil {
 		log.Println(err)
 	}

@@ -39,14 +39,15 @@ func setStockData(stocks []bson.M, marketType string) []bson.M {
 			} else {
 				s["code"] = s["code"].(string) + ".SZ"
 			}
-			s["marketType"] = marketType
+			s["marketType"] = "CN"
+			s["type"] = "index"
 			goto App
 		} else {
 			s["code"] = s["code"].(string) + "." + marketType
 		}
 		// 指标
 		s["marketType"] = marketType
-		s["change"] = s["price"].(float64) - s["close"].(float64)
+		s["type"] = "stock"
 
 		// 是股票
 		if s["total_share"].(float64) > 0 {
@@ -91,7 +92,7 @@ func getEastMoney(marketType string) {
 	} else {
 		rename = bson.M{
 			"f2": "price", "f3": "pct_chg", "f5": "vol", "f6": "amount", "f7": "amp", "f15": "high", "f16": "low",
-			"f17": "open", "f12": "code", "f14": "name", "f18": "close",
+			"f17": "open", "f12": "code", "f14": "name", "f18": "close", "f8": "tr",
 		}
 	}
 	//连接参数
@@ -124,8 +125,9 @@ func getEastMoney(marketType string) {
 		// 更新完成后传入通道
 		// MyChan <- true
 		for !marketime.IsOpen(marketType) {
+			time.Sleep(time.Millisecond * 100)
 		}
-		time.Sleep(time.Second * 600)
+		time.Sleep(time.Second * 60)
 	}
 }
 

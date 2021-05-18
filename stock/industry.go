@@ -55,13 +55,14 @@ func GetIndustry(marketType string) []bson.M {
 	matchStage := bson.D{{"$match", bson.M{"marketType": marketType}}}
 	groupStage := bson.D{
 		{"$group", bson.M{
-			"_id":     "$EMIds",
-			"总市值":     bson.M{"$sum": "$mc"},
+			"_id": "$marketType",
+			// "总市值":     bson.M{"$sum": "$mc"},
 			"vol":     bson.M{"$sum": "$vol"},
 			"amount":  bson.M{"$sum": "$amount"},
 			"max_pct": bson.M{"$max": "$pct_chg"},
 			"领涨股":     bson.M{"$first": "$name"},
 			"主力净流入":   bson.M{"$sum": "$main_net"},
+			"jlr_pct": bson.M{"$avg": "主力净比"},
 		}},
 	}
 	var results []bson.M
