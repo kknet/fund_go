@@ -162,11 +162,13 @@ func GetStockList(codes []string) []bson.M {
 // Search 搜索股票
 func Search(input string, searchType string) []bson.M {
 	var results []bson.M
-	err := coll.Find(ctx, bson.M{"_id": bson.M{"$regex": input}}).Limit(20).All(&results)
+
+	match := bson.M{"_id": bson.M{"$regex": input}}
+	// 按成交量排序
+	err := coll.Find(ctx, match).Limit(20).All(&results)
 	if err != nil {
 		log.Println(err)
 	}
-	fmt.Println(results)
 	return results
 }
 
@@ -182,4 +184,14 @@ func GetNorthFlow() {
 	// 读取内容
 	body, err := ioutil.ReadAll(res.Body)
 	fmt.Println(body)
+}
+
+// GetRank 全市场排行
+func GetRank(marketType string) []bson.M {
+	var results []bson.M
+	err := coll.Find(context.Background(), bson.M{"marketType": marketType}).Sort("amount").Limit(20).All(&results)
+	if err != nil {
+		log.Println(err)
+	}
+	return results
 }

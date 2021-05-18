@@ -8,7 +8,6 @@ import (
 	"reflect"
 	"strings"
 	"test/download"
-	"test/marketime"
 	"test/stock"
 	"time"
 )
@@ -49,7 +48,7 @@ func Detail(c *gin.Context) {
 	//写入ws数据
 	err = ws.WriteJSON(stock.GetDetailData(code))
 
-	for marketime.IsOpen() {
+	for {
 		// 阻塞
 		_ = <-download.MyChan
 
@@ -87,7 +86,7 @@ func Simple(c *gin.Context) {
 	//写入ws数据
 	err = ws.WriteJSON(oldData)
 
-	for marketime.IsOpen() {
+	for {
 		// 阻塞
 		_ = <-download.MyChan
 		//获取新数据
