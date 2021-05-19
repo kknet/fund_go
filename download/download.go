@@ -21,7 +21,7 @@ var json = jsoniter.ConfigCompatibleWithStandardLibrary
 // MyChan 通道
 var MyChan = make(chan bool)
 
-/* 计算股票指标 */
+// 计算股票指标
 func setStockData(stocks []bson.M, marketType string) []bson.M {
 	var results []bson.M
 	for _, s := range stocks {
@@ -48,7 +48,6 @@ func setStockData(stocks []bson.M, marketType string) []bson.M {
 		// 指标
 		s["marketType"] = marketType
 		s["type"] = "stock"
-
 		// 是股票
 		if s["total_share"].(float64) > 0 {
 			s["main_net"] = s["main_huge"].(float64) + s["main_big"].(float64)
@@ -59,7 +58,6 @@ func setStockData(stocks []bson.M, marketType string) []bson.M {
 			s["fmc"] = s["price"].(float64) * s["float_share"].(float64)
 			s["tr"] = s["vol"].(float64) / s["total_share"].(float64) * 10000
 		}
-
 	App:
 		results = append(results, s)
 	}
@@ -127,7 +125,7 @@ func getEastMoney(marketType string) {
 		for !marketime.IsOpen(marketType) {
 			time.Sleep(time.Millisecond * 100)
 		}
-		time.Sleep(time.Second * 60)
+		time.Sleep(time.Second * 999)
 	}
 }
 

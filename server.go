@@ -1,72 +1,57 @@
 package main
 
 import (
+	"fmt"
 	"github.com/gin-gonic/gin"
-	"go.mongodb.org/mongo-driver/bson"
-	"strings"
-	"test/api"
+	"io"
+	"net/http"
+	"os"
+	"test/apiV1"
 	"test/download"
-	"test/stock"
-)
-
-const ( // url前缀
-	WsUrl  = "/ws"
-	ApiUrl = "/api/v1"
 )
 
 /* 主函数 */
 func main() {
-	// 下载
+	// 启动后台下载
 	download.GoDownload()
+
+	// 设置日志
+	gin.DisableConsoleColor()
+	f, err := os.Create("./logs/run.log")
+	if err != nil {
+		fmt.Println("Could not open log.")
+		panic(err.Error())
+	}
+	gin.DefaultWriter = io.MultiWriter(f)
+
+	gin.SetMode(gin.ReleaseMode)
+	// 创建实例
 	r := gin.Default()
 
-	// websocket专用
-	r.GET(WsUrl+"/stock/detail", api.Detail)
-	r.GET(WsUrl+"/stock/simple", api.Simple)
+	// ApiV1
+	v1 := r.Group("/api/v1")
+	ws := r.Group("/ws")
 
-	// http请求
-	r.GET(ApiUrl+"/stock/detail", func(c *gin.Context) {
-		code := c.Query("code")
-		data := stock.GetDetailData(code)
-		c.JSON(200, gin.H{
-			"status": true, "data": data,
-		})
-	})
-	r.GET(ApiUrl+"/stock/simple", func(c *gin.Context) {
-		code := c.Query("code")
-		codes := strings.Split(code, ",")
-		data := stock.GetStockList(codes)
-		c.JSON(200, gin.H{
-			"status": true, "data": data,
-		})
-	})
-	// 市场页面聚合接口
-	r.GET(ApiUrl+"/stock/market", func(c *gin.Context) {
-		marketType := c.Query("marketType")
-		c.JSON(200, gin.H{
-			"status": true, "data": bson.M{
-				"numbers":  stock.GetNumbers(marketType),
-				"industry": stock.GetIndustry(marketType),
-			},
-		})
-	})
-	r.GET(ApiUrl+"/stock/search", func(c *gin.Context) {
-		input := c.Query("input")
-		searchType := c.Query("type")
-		data := stock.Search(input, searchType)
-		c.JSON(200, gin.H{
-			"status": true, "data": data,
-		})
-	})
-	r.GET(ApiUrl+"/stock/rank", func(c *gin.Context) {
-		marketType := c.Query("marketType")
-		data := stock.GetRank(marketType)
-		c.JSON(200, gin.H{
-			"status": true, "data": data,
-		})
+	// Stock
+	v1Stock := v1.Group("/stock")
+	v1Stock.GET("/detail", apiV1.GetDetail)
+	v1Stock.GET("/simple", apiV1.GetStockList)
+	v1Stock.GET("/chart", apiV1.GetChart)
+	v1Stock.GET("/market", apiV1.GetMarket)
+	v1Stock.GET("/search", apiV1.Search)
+	v1Stock.GET("/rank", apiV1.Rank)
+
+	// WebSocket
+	wsStock := ws.Group("/stock")
+	wsStock.GET("/detail", apiV1.Detail)
+	wsStock.GET("/simple", apiV1.Simple)
+
+	// 错误处理
+	r.NoRoute(func(context *gin.Context) {
+		context.JSON(http.StatusNotFound, gin.H{"Status": 404, "msg": "Page Not Found"})
 	})
 
-	err := r.Run("localhost:10888")
+	err = r.Run("localhost:10888")
 	if err != nil {
 		panic(err)
 	}

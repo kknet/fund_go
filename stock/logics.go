@@ -159,11 +159,50 @@ func GetStockList(codes []string) []bson.M {
 	return results
 }
 
+// GetMinuteChart 获取分时行情
+func GetMinuteChart(code string) []bson.M {
+	// 从雪球获取数据
+	url := "https://stock.xueqiu.com/v5/stock/chart/minute.json?period=1d&symbol=SH601066"
+	request, err := http.NewRequest("GET", url, nil)
+	if err != nil {
+		panic(err)
+	}
+	request.Header.Add("cookie", "device_id=24700f9f1986800ab4fcc880530dd0ed; s=dk11bk7hr3; cookiesu=301620717341066; remember=1; xq_a_token=986e48f0d816bca49abf998420bd5f7a9df0c506; xqat=986e48f0d816bca49abf998420bd5f7a9df0c506; xq_id_token=eyJ0eXAiOiJKV1QiLCJhbGciOiJSUzI1NiJ9.eyJ1aWQiOjM2MTE0MDQxNTUsImlzcyI6InVjIiwiZXhwIjoxNjIzNTA1OTMxLCJjdG0iOjE2MjA5MTM5MzE5OTMsImNpZCI6ImQ5ZDBuNEFadXAifQ.W2LqlQRexNO2VXk0BV91L_uvm9ssWyTYJho51017TI-IRLnkKu6sB35_ZOR1z4XsvnRMSmNlTRDvMKEiapXY4VUu66ySZv3OIzHWaPkxIxBK4cSnL7CFr6CTX0OMAuHuZNHnR-1OJBA5-bPafC47AW0SvJQEs_IBCB83GZK3M859ipuVp_Hn8S0qXbg9v91U-nf4qJXQ4GOT9pjBFQ08u_KagtmfcOfoec23_ejXfrQt_X0F6EKO_w5_LwY0iQmEhE7kM8MiQjOyF6zLOY2JBbnyEkULY4uce5IClP7snpHJp1icydWQsV-eJjlGW9EmVvcDxpIiDvXVG7zfVfjtog; xq_r_token=7193b60d61d2e4db36b3dd1a465837dff68f6400; xq_is_login=1; u=3611404155; bid=3c6bb14598fe9ac45474be34ecb46d45_komyayku; Hm_lvt_1db88642e346389874251b5a1eded6e3=1621264280,1621305028,1621311654,1621324081")
+
+	client := http.Client{}
+	res, err := client.Do(request)
+	if err != nil {
+		panic(err)
+	}
+	// 关闭连接
+	defer res.Body.Close()
+	// 读取内容
+	body, err := ioutil.ReadAll(res.Body)
+	str := json.Get(body, "data", "items").ToString()
+
+	// json解析
+	var temp []bson.M
+	_ = json.Unmarshal([]byte(str), &temp)
+
+	results := make([]bson.M, len(temp))
+	for i, item := range temp {
+		results[i] = bson.M{
+			"price": item["current"], "vol": item["volume"], "avg": item["avg_price"], "timestamp": item["timestamp"],
+			"amount": item["amount"],
+			"vol_compare": bson.M{
+				"sum":  item["volume_compare"].(map[string]interface{})["volume_sum"],
+				"last": item["volume_compare"].(map[string]interface{})["volume_sum_last"],
+			},
+		}
+	}
+	return results
+}
+
 // Search 搜索股票
 func Search(input string, searchType string) []bson.M {
 	var results []bson.M
-
 	match := bson.M{"$or": bson.A{
+		// 正则匹配 不区分大小写
 		bson.M{"_id": bson.M{"$regex": input, "$options": "i"}},
 		bson.M{"name": bson.M{"$regex": input, "$options": "i"}},
 	}}
@@ -197,4 +236,14 @@ func GetRank(marketType string) []bson.M {
 		log.Println(err)
 	}
 	return results
+}
+
+// FormatStock 股票代码格式化
+func FormatStock(input string) string {
+	return input
+}
+
+// GetRealtimeTicks 获取实时分笔成交
+func GetRealtimeTicks() {
+
 }

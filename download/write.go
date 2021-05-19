@@ -3,6 +3,8 @@ package download
 import (
 	"fmt"
 	"go.mongodb.org/mongo-driver/bson"
+	"log"
+	"sync"
 	"test/myMongo"
 	"time"
 )
@@ -14,18 +16,28 @@ func writeToMongo(stock []bson.M) {
 	start := time.Now()
 	err := insertToMongo(stock)
 
-	//var filter []bson.M
-	//var update []bson.M
-	for _, item := range stock {
-		err = coll.UpdateId(ctx, item["code"], bson.M{"$set": item})
-		if err != nil {
-		}
-		//filter = append(filter, bson.M{"_id": item["code"]})
-		//update = append(update, bson.M{"$set": item})
+	num := 2
+	half := len(stock) / num
+	// 双协程写入
+	group := sync.WaitGroup{}
+	group.Add(num)
+
+	tList := [][]bson.M{
+		stock[:half], stock[half+1:],
+		//stock[:half], stock[half+1: half*2+1], stock[half*2+1:],
 	}
-	//_, err = coll.UpdateAll(ctx, bson.M{"_id": bson.M{"$in": filter}}, update)
-	//if err != nil {
-	//}
+	for _, i := range tList {
+		go func() {
+			for _, item := range i {
+				err = coll.UpdateId(ctx, item["code"], bson.M{"$set": item})
+				if err != nil {
+					log.Println(err)
+				}
+			}
+			group.Done()
+		}()
+	}
+	group.Wait()
 	fmt.Println(time.Since(start))
 }
 
