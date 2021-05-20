@@ -4,9 +4,9 @@ import (
 	"context"
 	jsoniter "github.com/json-iterator/go"
 	"go.mongodb.org/mongo-driver/bson"
-	"io/ioutil"
-	"net/http"
+	"log"
 	"strings"
+	"test/common"
 	"test/marketime"
 	"time"
 )
@@ -53,10 +53,7 @@ func setStockData(stocks []bson.M, marketType string) []bson.M {
 			s["main_net"] = s["main_huge"].(float64) + s["main_big"].(float64)
 			s["main_in"] = s["main_net"]
 			s["main_out"] = s["main_net"]
-
-			s["mc"] = s["price"].(float64) * s["total_share"].(float64)
-			s["fmc"] = s["price"].(float64) * s["float_share"].(float64)
-			s["tr"] = s["vol"].(float64) / s["total_share"].(float64) * 10000
+			// 总市值，流通市值，换手率在前端实时计算
 		}
 	App:
 		results = append(results, s)
@@ -99,16 +96,14 @@ func getEastMoney(marketType string) {
 	}
 	//去掉末尾的逗号
 	url = url[:len(url)-1]
+
+	request := common.NewGetRequest(url)
 	for {
-		// 从东方财富下载数据
-		res, err := http.Get(url)
+		body, err := request.Do()
 		if err != nil {
+			log.Println("下载股票数据发生错误，", err.Error())
 			panic(err)
 		}
-		// 关闭连接
-		defer res.Body.Close()
-		// 读取内容
-		body, err := ioutil.ReadAll(res.Body)
 		str := json.Get(body, "data", "diff").ToString()
 		//改名
 		for i, item := range rename {

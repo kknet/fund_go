@@ -50,16 +50,11 @@ func GetMinuteChart(code string) bson.M {
 	if err != nil {
 		return bson.M{"msg": err.Error()}
 	}
-	request := common.NewGetRequest("https://stock.xueqiu.com/v5/stock/chart/minute.json?period=1d&symbol="+code, true)
-	client := http.Client{}
-	res, err := client.Do(request)
+	url := "https://stock.xueqiu.com/v5/stock/chart/minute.json?period=1d&symbol=" + code
+	body, err := common.NewGetRequest(url, true).Do()
 	if err != nil {
-		panic(err)
+		return bson.M{"msg": err.Error()}
 	}
-	// 关闭连接
-	defer res.Body.Close()
-	// 读取内容
-	body, err := ioutil.ReadAll(res.Body)
 	str := json.Get(body, "data", "items").ToString()
 	// json解析
 	var temp []bson.M
@@ -129,20 +124,29 @@ func GetRank(marketType string) []bson.M {
 	return results
 }
 
+// GetPanKou  获取五档明细
+func GetPanKou(code string) []bson.M {
+	// 格式化代码为雪球格式
+	code, err := FormatStock(code)
+	url := "https://stock.xueqiu.com/v5/stock/history/trade.json?&count=20&symbol=" + code
+	text, err := common.NewGetRequest(url, true).Do()
+	if err != nil {
+		panic(err)
+	}
+	fmt.Println(text)
+	return []bson.M{}
+}
+
 // GetRealtimeTicks 获取实时分笔成交
 func GetRealtimeTicks(code string) []bson.M {
 	// 格式化代码为雪球格式
 	code, err := FormatStock(code)
-	request := common.NewGetRequest("https://stock.xueqiu.com/v5/stock/history/trade.json?&count=30&symbol="+code, true)
-	client := http.Client{}
-	res, err := client.Do(request)
+
+	url := "https://stock.xueqiu.com/v5/stock/history/trade.json?&count=20&symbol=" + code
+	body, err := common.NewGetRequest(url, true).Do()
 	if err != nil {
-		panic(err)
+		return []bson.M{{"msg": err.Error()}}
 	}
-	// 关闭连接
-	defer res.Body.Close()
-	// 读取内容
-	body, err := ioutil.ReadAll(res.Body)
 	str := json.Get(body, "data", "items").ToString()
 	// json解析
 	var temp []bson.M
