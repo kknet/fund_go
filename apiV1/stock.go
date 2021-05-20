@@ -5,16 +5,9 @@ import (
 	"go.mongodb.org/mongo-driver/bson"
 	"strconv"
 	"strings"
+	"test/common"
 	"test/stock"
 )
-
-func GetDetail(c *gin.Context) {
-	code := c.Query("code")
-	data := stock.GetDetailData(code)
-	c.JSON(200, gin.H{
-		"status": true, "data": data,
-	})
-}
 
 // GetChart 获取图表数据
 func GetChart(c *gin.Context) {
@@ -32,7 +25,7 @@ func GetChart(c *gin.Context) {
 // 3. 指定size, page, sort可获取排行榜，如size=10, page=2, sort="vol" 获取成交量在全市场10-20名的股票
 func GetStockList(c *gin.Context) {
 
-	opt := stock.CListOpt{
+	opt := &common.CListOpt{
 		Codes:      strings.Split(c.Query("code"), ","),
 		MarketType: c.DefaultQuery("marketType", "CN"),
 		Search:     c.Query("search"),
@@ -63,5 +56,13 @@ func GetMarket(c *gin.Context) {
 			"numbers":  stock.GetNumbers(marketType),
 			"industry": stock.GetIndustry(marketType),
 		},
+	})
+}
+
+func GetTicks(c *gin.Context) {
+	code := c.Query("code")
+	data := stock.GetRealtimeTicks(code)
+	c.JSON(200, gin.H{
+		"status": true, "data": data,
 	})
 }

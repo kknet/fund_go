@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"reflect"
 	"strings"
+	"test/common"
 	"test/download"
 	"test/stock"
 	"time"
@@ -39,7 +40,7 @@ func Detail(c *gin.Context) {
 		return
 	}
 	code := string(msg)
-	opt := stock.CListOpt{Codes: []string{code}}
+	opt := common.NewOptByCodes([]string{code})
 	// code个数超过1
 	if len(strings.Split(code, ",")) > 1 {
 		err = ws.WriteMessage(mt, []byte("代码数量不能超过1！"))
@@ -47,7 +48,7 @@ func Detail(c *gin.Context) {
 	}
 	oldData := stock.GetStockList(opt)
 	//写入ws数据
-	err = ws.WriteJSON(stock.GetDetailData(code))
+	err = ws.WriteJSON(stock.GetMinuteChart(code))
 
 	for {
 		// 阻塞
@@ -60,7 +61,7 @@ func Detail(c *gin.Context) {
 		}
 		oldData = newData
 		//写入ws数据
-		err = ws.WriteJSON(stock.GetDetailData(code))
+		err = ws.WriteJSON(stock.GetMinuteChart(code))
 	}
 }
 
@@ -82,7 +83,7 @@ func Simple(c *gin.Context) {
 		return
 	}
 	codes := strings.Split(string(msg), ",")
-	opt := stock.CListOpt{Codes: codes}
+	opt := common.NewOptByCodes(codes)
 
 	oldData := stock.GetStockList(opt)
 	//写入ws数据

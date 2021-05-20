@@ -34,10 +34,10 @@ func main() {
 
 	// Stock
 	v1Stock := v1.Group("/stock")
-	v1Stock.GET("/detail", apiV1.GetDetail)
 	v1Stock.GET("/clist", apiV1.GetStockList)
 	v1Stock.GET("/chart", apiV1.GetChart)
 	v1Stock.GET("/market", apiV1.GetMarket)
+	v1Stock.GET("/ticks", apiV1.GetTicks)
 
 	// WebSocket
 	wsStock := ws.Group("/stock")
