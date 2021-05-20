@@ -3,6 +3,7 @@ package apiV1
 import (
 	"github.com/gin-gonic/gin"
 	"go.mongodb.org/mongo-driver/bson"
+	"strconv"
 	"strings"
 	"test/stock"
 )
@@ -24,10 +25,31 @@ func GetChart(c *gin.Context) {
 	})
 }
 
+// GetStockList 获取股票列表
+// 以下为几种不同的获取方式
+// 1. 指定code，如：code=000001.SH, 600519.SH, 00700.HK, AAPL.US
+// 2. 指定search搜索，如search="贵州" 或 “60051” 搜索到贵州茅台
+// 3. 指定size, page, sort可获取排行榜，如size=10, page=2, sort="vol" 获取成交量在全市场10-20名的股票
 func GetStockList(c *gin.Context) {
-	code := c.Query("code")
-	codes := strings.Split(code, ",")
-	data := stock.GetStockList(codes)
+
+	opt := stock.CListOpt{
+		Codes:      strings.Split(c.Query("code"), ","),
+		MarketType: c.DefaultQuery("marketType", "CN"),
+		Search:     c.Query("search"),
+		SortName:   c.Query("sort"),
+	}
+	switch c.Query("order") {
+	case "1", "T", "f", "true", "True":
+		opt.Sorted = true
+	default:
+		opt.Sorted = false
+	}
+	size, _ := strconv.Atoi(c.DefaultQuery("size", "20"))
+	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
+	opt.Size = size
+	opt.Page = page
+
+	data := stock.GetStockList(opt)
 	c.JSON(200, gin.H{
 		"status": true, "data": data,
 	})
@@ -41,23 +63,5 @@ func GetMarket(c *gin.Context) {
 			"numbers":  stock.GetNumbers(marketType),
 			"industry": stock.GetIndustry(marketType),
 		},
-	})
-}
-
-// Search 搜索
-func Search(c *gin.Context) {
-	input := c.Query("input")
-	searchType := c.Query("type")
-	data := stock.Search(input, searchType)
-	c.JSON(200, gin.H{
-		"status": true, "data": data,
-	})
-}
-
-func Rank(c *gin.Context) {
-	marketType := c.Query("marketType")
-	data := stock.GetRank(marketType)
-	c.JSON(200, gin.H{
-		"status": true, "data": data,
 	})
 }

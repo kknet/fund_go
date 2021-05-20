@@ -1,9 +1,9 @@
 package main
 
 import (
-	"fmt"
 	"github.com/gin-gonic/gin"
 	"io"
+	"log"
 	"net/http"
 	"os"
 	"test/apiV1"
@@ -19,7 +19,7 @@ func main() {
 	gin.DisableConsoleColor()
 	f, err := os.Create("./logs/run.log")
 	if err != nil {
-		fmt.Println("Could not open log.")
+		log.Println("Could not open log.")
 		panic(err.Error())
 	}
 	gin.DefaultWriter = io.MultiWriter(f)
@@ -35,11 +35,9 @@ func main() {
 	// Stock
 	v1Stock := v1.Group("/stock")
 	v1Stock.GET("/detail", apiV1.GetDetail)
-	v1Stock.GET("/simple", apiV1.GetStockList)
+	v1Stock.GET("/clist", apiV1.GetStockList)
 	v1Stock.GET("/chart", apiV1.GetChart)
 	v1Stock.GET("/market", apiV1.GetMarket)
-	v1Stock.GET("/search", apiV1.Search)
-	v1Stock.GET("/rank", apiV1.Rank)
 
 	// WebSocket
 	wsStock := ws.Group("/stock")

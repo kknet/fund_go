@@ -31,6 +31,18 @@ type SourceData struct {
 	} `json:"data"`
 }
 
+// CListOpt
+// StockList Options
+type CListOpt struct {
+	Codes      []string //代码列表
+	MarketType string   // 市场类型
+	Sorted     bool     //排序
+	SortName   string
+	Search     string //搜索
+	Size       int    //分页
+	Page       int
+}
+
 // GetDetailData 获取单只股票图表信息
 func GetDetailData(code string) interface{} {
 	//最后一位
@@ -144,15 +156,31 @@ func GetDetailData(code string) interface{} {
 			"times": times, "price": price, "vol": vol, "avg": avg, "zhudong": zhudong,
 		},
 		"ticks": fenbi,
-		"items": GetStockList([]string{code}),
+		"items": GetStockList(CListOpt{Codes: []string{code}}),
 	}
 	return mapData
 }
 
 // GetStockList 获取多只股票信息
-func GetStockList(codes []string) []bson.M {
+func GetStockList(opt CListOpt) []bson.M {
 	var results []bson.M
-	err := coll.Find(ctx, bson.M{"_id": bson.M{"$in": codes}}).Limit(30).All(&results)
+	var err error
+	// 指定Codes
+	if opt.Codes[0] != "" {
+		err = coll.Find(ctx, bson.M{"_id": bson.M{"$in": opt.Codes}}).Limit(30).All(&results)
+		// Search
+	} else if opt.Search != "" {
+		match := bson.M{"$or": bson.A{
+			// 正则匹配 不区分大小写
+			bson.M{"_id": bson.M{"$regex": opt.Search, "$options": "i"}},
+			bson.M{"name": bson.M{"$regex": opt.Search, "$options": "i"}},
+		}}
+		err = coll.Find(ctx, match).Limit(10).All(&results)
+		fmt.Println(results)
+		// RankList
+	} else if opt.SortName != "" {
+
+	}
 	if err != nil {
 		log.Println(err)
 	}
@@ -162,7 +190,7 @@ func GetStockList(codes []string) []bson.M {
 // GetMinuteChart 获取分时行情
 func GetMinuteChart(code string) []bson.M {
 	// 从雪球获取数据
-	url := "https://stock.xueqiu.com/v5/stock/chart/minute.json?period=1d&symbol=SH601066"
+	url := "https://stock.xueqiu.com/v5/stock/chart/minute.json?period=1d&symbol=" + code
 	request, err := http.NewRequest("GET", url, nil)
 	if err != nil {
 		panic(err)
@@ -185,14 +213,15 @@ func GetMinuteChart(code string) []bson.M {
 	_ = json.Unmarshal([]byte(str), &temp)
 
 	results := make([]bson.M, len(temp))
-	for i, item := range temp {
+	for i, x := range temp {
 		results[i] = bson.M{
-			"price": item["current"], "vol": item["volume"], "avg": item["avg_price"], "timestamp": item["timestamp"],
-			"amount": item["amount"],
+			"price": x["current"], "vol": x["volume"], "avg": x["avg_price"], "timestamp": x["timestamp"],
+			"amount": x["amount"],
 			"vol_compare": bson.M{
-				"sum":  item["volume_compare"].(map[string]interface{})["volume_sum"],
-				"last": item["volume_compare"].(map[string]interface{})["volume_sum_last"],
+				"now":  x["volume_compare"].(map[string]interface{})["volume_sum"],
+				"last": x["volume_compare"].(map[string]interface{})["volume_sum_last"],
 			},
+			"money_flow": x["capital"],
 		}
 	}
 	return results

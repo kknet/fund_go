@@ -39,12 +39,13 @@ func Detail(c *gin.Context) {
 		return
 	}
 	code := string(msg)
+	opt := stock.CListOpt{Codes: []string{code}}
 	// code个数超过1
 	if len(strings.Split(code, ",")) > 1 {
 		err = ws.WriteMessage(mt, []byte("代码数量不能超过1！"))
 		return
 	}
-	oldData := stock.GetStockList([]string{code})
+	oldData := stock.GetStockList(opt)
 	//写入ws数据
 	err = ws.WriteJSON(stock.GetDetailData(code))
 
@@ -52,7 +53,7 @@ func Detail(c *gin.Context) {
 		// 阻塞
 		_ = <-download.MyChan
 
-		newData := stock.GetStockList([]string{code})
+		newData := stock.GetStockList(opt)
 		// 相等则不写入，继续阻塞
 		if reflect.DeepEqual(oldData, newData) {
 			continue
@@ -81,8 +82,9 @@ func Simple(c *gin.Context) {
 		return
 	}
 	codes := strings.Split(string(msg), ",")
+	opt := stock.CListOpt{Codes: codes}
 
-	oldData := stock.GetStockList(codes)
+	oldData := stock.GetStockList(opt)
 	//写入ws数据
 	err = ws.WriteJSON(oldData)
 
@@ -90,7 +92,7 @@ func Simple(c *gin.Context) {
 		// 阻塞
 		_ = <-download.MyChan
 		//获取新数据
-		newData := stock.GetStockList(codes)
+		newData := stock.GetStockList(opt)
 		// 相等则不写入，继续阻塞
 		if reflect.DeepEqual(oldData, newData) {
 			continue
