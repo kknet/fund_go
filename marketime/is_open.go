@@ -1,6 +1,8 @@
 package marketime
 
-import "time"
+import (
+	"time"
+)
 
 func IsOpen(marketType string) bool { //判断是否开市
 	if marketType == "CN" {

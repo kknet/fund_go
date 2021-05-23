@@ -13,10 +13,11 @@ type myRequest struct {
 	setCookie bool // 配置雪球Cookie
 	r         *http.Request
 	c         *http.Client
+	body      []byte
 }
 
 // NewGetRequest
-// 默认 setCookie为false
+// GET请求
 func NewGetRequest(url string, setCookie ...bool) *myRequest {
 	res := &myRequest{
 		url:       url,

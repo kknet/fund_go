@@ -66,7 +66,7 @@ func getEastMoney(marketType string) {
 	fs := map[string]string{
 		"CNIndex": "fs=m:1+s:2,m:0+t:5",                         //沪深指数
 		"CN":      "fs=m:0+t:6,m:0+t:80,m:1+t:2,m:1+t:23",       // 沪深
-		"HK":      "fs=m:128+t:3,m:128+t:4,m:128+t:1,m:128+t:2", // 港股
+		"HK":      "fs=m:116+t:1,m:116+t:2,m:116+t:3,m:116+t:4", // 港股
 		"US":      "fs=m:105,m:106,m:107",                       // 美股
 	}
 	url := URL + "po=1&fid=f6&pz=6000&np=1&fltt=2&pn=1" + "&" + fs[marketType] + "&fields="
@@ -76,8 +76,9 @@ func getEastMoney(marketType string) {
 		rename = bson.M{
 			"f2": "price", "f3": "pct_chg", "f5": "vol", "f6": "amount", "f7": "amp", "f15": "high", "f16": "low",
 			"f17": "open", "f12": "code", "f10": "vr", "f11": "pct5min", "f14": "name", "f18": "close",
-			"f22": "涨速", "f23": "pb", "f33": "wb",
-			"f24": "pct60day", "f25": "pct_current_year", "f34": "外盘", "f35": "内盘",
+			"f22": "涨速", "f23": "pb", "f33": "wb", "f13": "cid",
+			"f24": "pct60day", "f25": "pct_current_year",
+			// "f34": "外盘", "f35": "内盘",
 			"f38": "total_share", "f39": "float_share", "f115": "pe_ttm", "f100": "EMIds",
 			// 财务
 			// "f37": "roe", "f40": "营收", "f41": "营收同比", "f45": "净利润", "f46": "净利润同比",
@@ -87,7 +88,7 @@ func getEastMoney(marketType string) {
 	} else {
 		rename = bson.M{
 			"f2": "price", "f3": "pct_chg", "f5": "vol", "f6": "amount", "f7": "amp", "f15": "high", "f16": "low",
-			"f17": "open", "f12": "code", "f14": "name", "f18": "close", "f8": "tr",
+			"f17": "open", "f12": "code", "f14": "name", "f18": "close", "f8": "tr", "f13": "cid",
 		}
 	}
 	//连接参数

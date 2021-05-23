@@ -20,7 +20,7 @@ func main() {
 	f, err := os.Create("./logs/run.log")
 	if err != nil {
 		log.Println("Could not open log.")
-		panic(err.Error())
+		panic(err)
 	}
 	gin.DefaultWriter = io.MultiWriter(f)
 
@@ -38,6 +38,7 @@ func main() {
 	v1Stock.GET("/chart", apiV1.GetChart)
 	v1Stock.GET("/market", apiV1.GetMarket)
 	v1Stock.GET("/ticks", apiV1.GetTicks)
+	v1Stock.GET("/pankou", apiV1.GetPanKou)
 
 	// WebSocket
 	wsStock := ws.Group("/stock")

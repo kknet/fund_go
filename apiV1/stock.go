@@ -21,8 +21,8 @@ func GetChart(c *gin.Context) {
 // GetStockList 获取股票列表
 // 以下为几种不同的获取方式
 // 1. 指定code，如：code=000001.SH, 600519.SH, 00700.HK, AAPL.US
-// 2. 指定search搜索，如search="贵州" 或 “60051” 搜索到贵州茅台
-// 3. 指定size, page, sort可获取排行榜，如size=10, page=2, sort="vol" 获取成交量在全市场10-20名的股票
+// 2. 指定search搜索
+// 3. 指定size, page, sort可获取排名，如size=10, page=2, sort="vol" 获取成交量在全市场10-20名的股票
 func GetStockList(c *gin.Context) {
 
 	opt := &common.CListOpt{
@@ -32,8 +32,10 @@ func GetStockList(c *gin.Context) {
 		SortName:   c.Query("sort"),
 	}
 	switch c.Query("order") {
-	case "1", "T", "f", "true", "True":
+	case "true", "True":
 		opt.Sorted = true
+	case "false", "False":
+		opt.Sorted = false
 	default:
 		opt.Sorted = false
 	}
@@ -62,6 +64,14 @@ func GetMarket(c *gin.Context) {
 func GetTicks(c *gin.Context) {
 	code := c.Query("code")
 	data := stock.GetRealtimeTicks(code)
+	c.JSON(200, gin.H{
+		"status": true, "data": data,
+	})
+}
+
+func GetPanKou(c *gin.Context) {
+	code := c.Query("code")
+	data := stock.GetPanKou(code)
 	c.JSON(200, gin.H{
 		"status": true, "data": data,
 	})
