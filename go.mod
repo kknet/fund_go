@@ -8,6 +8,7 @@ require (
 	github.com/gorilla/websocket v1.4.2
 	github.com/json-iterator/go v1.1.11
 	github.com/kr/pretty v0.1.0 // indirect
+	github.com/lib/pq v1.10.2 // indirect
 	github.com/mattn/go-sqlite3 v1.14.7 // indirect
 	github.com/qiniu/qmgo v0.9.4 // indirect
 	go.mongodb.org/mongo-driver v1.5.2 // indirect

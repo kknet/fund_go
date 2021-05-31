@@ -41,21 +41,22 @@ func setStockData(stocks []bson.M, marketType string) []bson.M {
 			}
 			s["marketType"] = "CN"
 			s["type"] = "index"
-			goto App
+			s["_id"] = s["code"]
+			goto APP
 		} else {
 			s["code"] = s["code"].(string) + "." + marketType
 		}
-		// 指标
-		s["marketType"] = marketType
-		s["type"] = "stock"
+		s["_id"] = s["code"]
 		// 是股票
 		if s["total_share"].(float64) > 0 {
+			s["type"] = "stock"
+			s["marketType"] = marketType
 			s["main_net"] = s["main_huge"].(float64) + s["main_big"].(float64)
 			s["main_in"] = s["main_net"]
 			s["main_out"] = s["main_net"]
 			// 总市值，流通市值，换手率在前端实时计算
 		}
-	App:
+	APP:
 		results = append(results, s)
 	}
 	return results
@@ -72,13 +73,12 @@ func getEastMoney(marketType string) {
 	url := URL + "po=1&fid=f6&pz=6000&np=1&fltt=2&pn=1" + "&" + fs[marketType] + "&fields="
 	// 重命名
 	var rename bson.M
-	if len(marketType) <= 2 {
+	if marketType != "CNIndex" {
 		rename = bson.M{
 			"f2": "price", "f3": "pct_chg", "f5": "vol", "f6": "amount", "f7": "amp", "f15": "high", "f16": "low",
-			"f17": "open", "f12": "code", "f10": "vr", "f11": "pct5min", "f14": "name", "f18": "close",
-			"f22": "涨速", "f23": "pb", "f33": "wb", "f13": "cid",
-			"f24": "pct60day", "f25": "pct_current_year",
-			// "f34": "外盘", "f35": "内盘",
+			"f17": "open", "f12": "code", "f10": "vr", "f13": "cid", "f14": "name", "f18": "close",
+			"f22": "涨速", "f23": "pb", "f33": "wb",
+			// "f34": "外盘", "f35": "内盘", "f24": "pct60day", "f25": "pct_current_year", "f11": "pct5min",
 			"f38": "total_share", "f39": "float_share", "f115": "pe_ttm", "f100": "EMIds",
 			// 财务
 			// "f37": "roe", "f40": "营收", "f41": "营收同比", "f45": "净利润", "f46": "净利润同比",
@@ -117,11 +117,11 @@ func getEastMoney(marketType string) {
 		temp = setStockData(temp, marketType)
 		writeToMongo(temp)
 		// 更新完成后传入通道
-		// MyChan <- true
+		MyChan <- true
 		for !marketime.IsOpen(marketType) {
 			time.Sleep(time.Millisecond * 100)
 		}
-		time.Sleep(time.Second * 999)
+		time.Sleep(time.Second * 3)
 	}
 }
 

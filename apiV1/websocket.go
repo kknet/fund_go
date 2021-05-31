@@ -3,11 +3,12 @@ package apiV1
 import (
 	"github.com/gin-gonic/gin"
 	"github.com/gorilla/websocket"
+	"go.mongodb.org/mongo-driver/bson"
 	"log"
 	"net/http"
 	"reflect"
 	"strings"
-	"test/common"
+	"sync"
 	"test/download"
 	"test/stock"
 	"time"
@@ -23,8 +24,8 @@ var upGrader = websocket.Upgrader{
 	},
 }
 
-// Detail /* 实时图表行情 */
-func Detail(c *gin.Context) {
+// Items 详情页面整合行情
+func Items(c *gin.Context) {
 	//升级get请求为webSocket协议
 	ws, err := upGrader.Upgrade(c.Writer, c.Request, nil)
 	if err != nil {
@@ -34,35 +35,33 @@ func Detail(c *gin.Context) {
 	//设置超时
 	err = ws.SetReadDeadline(time.Now().Add(OVERTIME))
 	//读取客户端发送的数据
-	mt, msg, err := ws.ReadMessage()
+	_, msg, err := ws.ReadMessage()
 	if err != nil {
-		log.Println("读取数据失败，", err)
+		err = ws.WriteJSON("读取代码超时！")
 		return
 	}
 	code := string(msg)
-	opt := common.NewOptByCodes([]string{code})
-	// code个数超过1
-	if len(strings.Split(code, ",")) > 1 {
-		err = ws.WriteMessage(mt, []byte("代码数量不能超过1！"))
+	// 查看代码是否存在
+	single, err := stock.GetSingleStock(code)
+	if err != nil {
+		err = ws.WriteJSON(err.Error())
 		return
 	}
-	oldData := stock.GetStockList(opt)
-	//写入ws数据
-	err = ws.WriteJSON(stock.GetMinuteChart(code))
-
-	for {
-		// 阻塞
-		_ = <-download.MyChan
-
-		newData := stock.GetStockList(opt)
-		// 相等则不写入，继续阻塞
-		if reflect.DeepEqual(oldData, newData) {
-			continue
-		}
-		oldData = newData
-		//写入ws数据
-		err = ws.WriteJSON(stock.GetMinuteChart(code))
-	}
+	_ = ws.WriteJSON(bson.M{"data": single, "type": "items"})
+	// 发送信息
+	group := sync.WaitGroup{}
+	group.Add(2)
+	go func() {
+		info := stock.GetPanKou(code)
+		_ = ws.WriteJSON(bson.M{"data": info, "type": "pankou"})
+		group.Done()
+	}()
+	go func() {
+		info := stock.GetRealtimeTicks(code)
+		_ = ws.WriteJSON(bson.M{"data": info, "type": "ticks"})
+		group.Done()
+	}()
+	group.Wait()
 }
 
 // Simple /* 简略行情 */
@@ -83,9 +82,8 @@ func Simple(c *gin.Context) {
 		return
 	}
 	codes := strings.Split(string(msg), ",")
-	opt := common.NewOptByCodes(codes)
 
-	oldData := stock.GetStockList(opt)
+	oldData := stock.GetStockList(codes)
 	//写入ws数据
 	err = ws.WriteJSON(oldData)
 
@@ -93,7 +91,7 @@ func Simple(c *gin.Context) {
 		// 阻塞
 		_ = <-download.MyChan
 		//获取新数据
-		newData := stock.GetStockList(opt)
+		newData := stock.GetStockList(codes)
 		// 相等则不写入，继续阻塞
 		if reflect.DeepEqual(oldData, newData) {
 			continue
@@ -122,9 +120,8 @@ func Ticks(c *gin.Context) {
 		return
 	}
 	codes := strings.Split(string(msg), ",")
-	opt := common.NewOptByCodes(codes)
 
-	oldData := stock.GetStockList(opt)
+	oldData := stock.GetStockList(codes)
 	//写入ws数据
 	err = ws.WriteJSON(oldData)
 
@@ -132,7 +129,7 @@ func Ticks(c *gin.Context) {
 		// 阻塞
 		_ = <-download.MyChan
 		//获取新数据
-		newData := stock.GetStockList(opt)
+		newData := stock.GetStockList(codes)
 		// 相等则不写入，继续阻塞
 		if reflect.DeepEqual(oldData, newData) {
 			continue

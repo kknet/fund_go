@@ -3,7 +3,6 @@ package apiV1
 import (
 	"github.com/gin-gonic/gin"
 	"go.mongodb.org/mongo-driver/bson"
-	"strconv"
 	"strings"
 	"test/common"
 	"test/stock"
@@ -12,6 +11,7 @@ import (
 // GetChart 获取图表数据
 func GetChart(c *gin.Context) {
 	code := c.Query("code")
+	//data := stock.GetSimpleMinute(code)
 	data := stock.GetMinuteChart(code)
 	c.JSON(200, gin.H{
 		"status": true, "data": data,
@@ -19,35 +19,30 @@ func GetChart(c *gin.Context) {
 }
 
 // GetStockList 获取股票列表
-// 以下为几种不同的获取方式
-// 1. 指定code，如：code=000001.SH, 600519.SH, 00700.HK, AAPL.US
-// 2. 指定search搜索
-// 3. 指定size, page, sort可获取排名，如size=10, page=2, sort="vol" 获取成交量在全市场10-20名的股票
 func GetStockList(c *gin.Context) {
-
-	opt := &common.CListOpt{
-		Codes:      strings.Split(c.Query("code"), ","),
-		MarketType: c.DefaultQuery("marketType", "CN"),
-		Search:     c.Query("search"),
-		SortName:   c.Query("sort"),
+	var data []bson.M
+	// 指定code
+	codes := c.Query("code")
+	if codes != "" {
+		clist := strings.Split(codes, ",")
+		data = stock.GetStockList(clist)
 	}
-	switch c.Query("order") {
-	case "true", "True":
-		opt.Sorted = true
-	case "false", "False":
-		opt.Sorted = false
-	default:
-		opt.Sorted = false
+	// 可指定chart, 获取简略图表数据
+	switch c.Query("chart") {
+	case "minute", "trends":
+		data = common.GoFunc(data, stock.AddSimpleMinute)
 	}
-	size, _ := strconv.Atoi(c.DefaultQuery("size", "20"))
-	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
-	opt.Size = size
-	opt.Page = page
-
-	data := stock.GetStockList(opt)
 	c.JSON(200, gin.H{
 		"status": true, "data": data,
 	})
+}
+
+func GetRank(c *gin.Context) {
+
+}
+
+func Search(c *gin.Context) {
+
 }
 
 // GetMarket 市场页面聚合接口
