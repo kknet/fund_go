@@ -7,7 +7,6 @@ import (
 	"log"
 	"strings"
 	"test/common"
-	"test/marketime"
 	"time"
 )
 
@@ -103,7 +102,6 @@ func getEastMoney(marketType string) {
 		body, err := request.Do()
 		if err != nil {
 			log.Println("下载股票数据发生错误，", err.Error())
-			panic(err)
 		}
 		str := json.Get(body, "data", "diff").ToString()
 		//改名
@@ -117,11 +115,11 @@ func getEastMoney(marketType string) {
 		temp = setStockData(temp, marketType)
 		writeToMongo(temp)
 		// 更新完成后传入通道
-		MyChan <- true
-		for !marketime.IsOpen(marketType) {
-			time.Sleep(time.Millisecond * 100)
-		}
-		time.Sleep(time.Second * 3)
+		//MyChan <- true
+		//for !marketime.IsOpen(marketType) {
+		//	time.Sleep(time.Millisecond * 100)
+		//}
+		time.Sleep(time.Second * 1)
 	}
 }
 
@@ -130,5 +128,5 @@ func GoDownload() {
 	go getEastMoney("CN")
 	go getEastMoney("CNIndex")
 	go getEastMoney("HK")
-	go getEastMoney("US")
+	//go getEastMoney("US")
 }

@@ -37,16 +37,6 @@ func GetStockList(codes []string) []bson.M {
 	return results
 }
 
-// GetSingleStock 获取单只股票信息
-func GetSingleStock(code string) (bson.M, error) {
-	var results bson.M
-	err := coll.Find(ctx, bson.M{"_id": code}).One(&results)
-	if err != nil || len(results) == 0 {
-		return results, errors.New("改代码不存在")
-	}
-	return results, nil
-}
-
 // AddSimpleMinute 添加简略分时行情
 func AddSimpleMinute(items bson.M) {
 	// 获取cid
@@ -64,26 +54,36 @@ func AddSimpleMinute(items bson.M) {
 
 	json.Get(body, "data", "trends").ToVal(&info)
 
-	results := make([]float64, len(info))
-	for i := range info {
+	// 间隔 2
+	space := 2
+	results := make([]float64, 0)
+
+	for i := len(info) % space; i < len(info); i += space {
 		item := strings.Split(info[i], ",")[1]
-		results[i], _ = strconv.ParseFloat(item, 8)
+		data, _ := strconv.ParseFloat(item, 8)
+		results = append(results, data)
 	}
 	items["chart"] = bson.M{
-		"trends": results, "close": preClose, "total": total, "timestamp": timestamp,
+		"trends": results, "close": preClose, "total": total, "timestamp": timestamp, "space": space,
 	}
 }
 
 // Search 搜索股票
-func Search(input string) []bson.M {
+func Search(input string, marketType string) interface{} {
 	var results []bson.M
+	// 先搜索CN
 	match := bson.M{"$or": bson.A{
 		// 正则匹配 不区分大小写
-		bson.M{"_id": bson.M{"$regex": input, "$options": "i"}},
-		bson.M{"name": bson.M{"$regex": input, "$options": "i"}},
+		bson.M{"_id": bson.M{"$regex": input, "$options": "i"}, "marketType": marketType, "type": "stock"},
+		bson.M{"name": bson.M{"$regex": input, "$options": "i"}, "marketType": marketType, "type": "stock"},
 	}}
 	// 按成交量排序
-	err := coll.Find(ctx, match).Limit(10).All(&results)
+	err := coll.Find(ctx, match).Limit(12).All(&results)
+	if err != nil {
+		log.Println(err)
+	}
+
+	// 若CN结果不足10条，继续搜索HK
 	if err != nil {
 		log.Println(err)
 	}
@@ -132,9 +132,9 @@ func GetPanKou(code string) bson.M {
 
 // GetRealtimeTicks 获取实时分笔成交
 func GetRealtimeTicks(code string) bson.M {
-	item, err := GetSingleStock(code)
+	item := GetStockList([]string{code})[0]
 	// 格式化代码为雪球格式
-	code, err = FormatStock(code)
+	code, err := FormatStock(code)
 
 	url := "https://stock.xueqiu.com/v5/stock/history/trade.json?&count=50&symbol=" + code
 	body, err := common.NewGetRequest(url, true).Do()
@@ -169,9 +169,9 @@ func FormatStock(input string) (string, error) {
 	}
 	// 代码后缀
 	switch item[1] {
-	case "SH", "SZ":
+	case "SH", "SZ", "sh", "sz":
 		code = item[1] + item[0]
-	case "HK", "US":
+	case "HK", "US", "us", "hk":
 		code = item[0]
 	default:
 		return "", errors.New("代码格式不正确")
@@ -182,7 +182,7 @@ func FormatStock(input string) (string, error) {
 // GetMinuteChart 获取分时行情
 func GetMinuteChart(code string) bson.M {
 	// 获取cid
-	items, err := GetSingleStock(code)
+	items := GetStockList([]string{code})[0]
 	cid := int(items["cid"].(float64))
 	symbol := strings.Split(code, ".")[0]
 

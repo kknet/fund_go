@@ -42,11 +42,7 @@ func Items(c *gin.Context) {
 	}
 	code := string(msg)
 	// 查看代码是否存在
-	single, err := stock.GetSingleStock(code)
-	if err != nil {
-		err = ws.WriteJSON(err.Error())
-		return
-	}
+	single := stock.GetStockList([]string{code})
 	_ = ws.WriteJSON(bson.M{"data": single, "type": "items"})
 	// 发送信息
 	group := sync.WaitGroup{}

@@ -42,7 +42,12 @@ func GetRank(c *gin.Context) {
 }
 
 func Search(c *gin.Context) {
-
+	input := c.Query("input")
+	marketType := c.Query("marketType")
+	data := stock.Search(input, marketType)
+	c.JSON(200, gin.H{
+		"status": true, "data": data,
+	})
 }
 
 // GetMarket 市场页面聚合接口
