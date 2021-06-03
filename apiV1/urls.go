@@ -38,7 +38,17 @@ func GetStockList(c *gin.Context) {
 }
 
 func GetRank(c *gin.Context) {
-
+	opt := common.RankOpt{
+		MarketType: c.Query("marketType"),
+		SortName:   c.DefaultQuery("sort", "vol"),
+		Sorted:     c.GetBool("sorted"),
+		Size:       c.GetInt("size"),
+		Page:       c.GetInt("page"),
+	}
+	data := stock.GetRank(&opt)
+	c.JSON(200, gin.H{
+		"status": true, "data": data,
+	})
 }
 
 func Search(c *gin.Context) {
@@ -53,12 +63,22 @@ func Search(c *gin.Context) {
 // GetMarket 市场页面聚合接口
 func GetMarket(c *gin.Context) {
 	marketType := c.Query("marketType")
-	c.JSON(200, gin.H{
-		"status": true, "data": bson.M{
-			"numbers":  stock.GetNumbers(marketType),
-			"industry": stock.GetIndustry(marketType),
-		},
-	})
+	if marketType == "CN" {
+		c.JSON(200, gin.H{
+			"status": true, "data": bson.M{
+				"numbers":  stock.GetNumbers(marketType),
+				"industry": stock.GetIndustry("industry"),
+				"sw":       stock.GetIndustry("sw"),
+				"area":     stock.GetIndustry("area"),
+			},
+		})
+	} else {
+		c.JSON(200, gin.H{
+			"status": true, "data": bson.M{
+				"numbers": stock.GetNumbers(marketType),
+			},
+		})
+	}
 }
 
 func GetTicks(c *gin.Context) {

@@ -54,7 +54,7 @@ func AddSimpleMinute(items bson.M) {
 
 	json.Get(body, "data", "trends").ToVal(&info)
 
-	// 间隔 2
+	// 间隔
 	space := 2
 	results := make([]float64, 0)
 
@@ -82,11 +82,6 @@ func Search(input string, marketType string) interface{} {
 	if err != nil {
 		log.Println(err)
 	}
-
-	// 若CN结果不足10条，继续搜索HK
-	if err != nil {
-		log.Println(err)
-	}
 	return results
 }
 
@@ -105,9 +100,9 @@ func GetNorthFlow() {
 }
 
 // GetRank 全市场排行
-func GetRank(marketType string) []bson.M {
+func GetRank(opt *common.RankOpt) []bson.M {
 	var results []bson.M
-	err := coll.Find(ctx, bson.M{"marketType": marketType}).Limit(20).All(&results)
+	err := coll.Find(ctx, bson.M{"marketType": opt.MarketType, "type": "stock"}).Limit(20).All(&results)
 	if err != nil {
 		log.Println(err)
 	}
@@ -132,7 +127,6 @@ func GetPanKou(code string) bson.M {
 
 // GetRealtimeTicks 获取实时分笔成交
 func GetRealtimeTicks(code string) bson.M {
-	item := GetStockList([]string{code})[0]
 	// 格式化代码为雪球格式
 	code, err := FormatStock(code)
 
@@ -155,7 +149,7 @@ func GetRealtimeTicks(code string) bson.M {
 			"vol":       item["trade_volume"],
 		}
 	}
-	return bson.M{"data": results, "items": item}
+	return bson.M{"data": results}
 }
 
 // FormatStock 股票代码格式化

@@ -40,12 +40,10 @@ func setStockData(stocks []bson.M, marketType string) []bson.M {
 			}
 			s["marketType"] = "CN"
 			s["type"] = "index"
-			s["_id"] = s["code"]
 			goto APP
 		} else {
 			s["code"] = s["code"].(string) + "." + marketType
 		}
-		s["_id"] = s["code"]
 		// 是股票
 		if s["total_share"].(float64) > 0 {
 			s["type"] = "stock"
@@ -53,9 +51,11 @@ func setStockData(stocks []bson.M, marketType string) []bson.M {
 			s["main_net"] = s["main_huge"].(float64) + s["main_big"].(float64)
 			s["main_in"] = s["main_net"]
 			s["main_out"] = s["main_net"]
-			// 总市值，流通市值，换手率在前端实时计算
+			s["mc"] = s["total_share"].(float64) * s["price"].(float64)
+			s["fmc"] = s["float_share"].(float64) * s["price"].(float64)
 		}
 	APP:
+		s["_id"] = s["code"]
 		results = append(results, s)
 	}
 	return results
@@ -78,7 +78,8 @@ func getEastMoney(marketType string) {
 			"f17": "open", "f12": "code", "f10": "vr", "f13": "cid", "f14": "name", "f18": "close",
 			"f22": "涨速", "f23": "pb", "f33": "wb",
 			// "f34": "外盘", "f35": "内盘", "f24": "pct60day", "f25": "pct_current_year", "f11": "pct5min",
-			"f38": "total_share", "f39": "float_share", "f115": "pe_ttm", "f100": "EMIds",
+			"f38": "total_share", "f39": "float_share", "f115": "pe_ttm",
+			//"f100": "EMIds",
 			// 财务
 			// "f37": "roe", "f40": "营收", "f41": "营收同比", "f45": "净利润", "f46": "净利润同比",
 			// 资金
@@ -118,8 +119,8 @@ func getEastMoney(marketType string) {
 		//MyChan <- true
 		//for !marketime.IsOpen(marketType) {
 		//	time.Sleep(time.Millisecond * 100)
-		//}
-		time.Sleep(time.Second * 1)
+		//
+		time.Sleep(time.Second * 3)
 	}
 }
 
@@ -128,5 +129,5 @@ func GoDownload() {
 	go getEastMoney("CN")
 	go getEastMoney("CNIndex")
 	go getEastMoney("HK")
-	//go getEastMoney("US")
+	go getEastMoney("US")
 }

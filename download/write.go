@@ -10,7 +10,9 @@ var coll = myMongo.ConnectMongo()
 // 更新数据
 func writeToMongo(stock []bson.M) {
 	//start := time.Now()
-	err := insertToMongo(stock)
+	var err error
+
+	err = insertToMongo(stock)
 
 	for _, item := range stock {
 		err = coll.UpdateId(ctx, item["code"], bson.M{"$set": item})
@@ -18,7 +20,7 @@ func writeToMongo(stock []bson.M) {
 			//log.Println(err)
 		}
 	}
-	//fmt.Println(time.Since(start))
+	//fmt.Println("长度", len(stock), "用时：", time.Since(start))
 }
 
 // 初始化插入
