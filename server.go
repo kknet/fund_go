@@ -50,9 +50,10 @@ func main() {
 
 	// 错误处理
 	r.NoRoute(func(context *gin.Context) {
-		context.JSON(http.StatusNotFound, gin.H{"Status": 404, "msg": "Page Not Found"})
+		context.JSON(http.StatusNotFound, gin.H{"status": 404, "msg": "page not found"})
 	})
 
+	// 启动
 	err := r.Run("localhost:10888")
 	if err != nil {
 		panic(err)

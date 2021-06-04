@@ -76,7 +76,7 @@ func GetNumbers(marketType string) bson.M {
 func GetIndustry(idsName string) []bson.M {
 	var results []bson.M
 	_ = coll.Aggregate(ctx, mongo.Pipeline{
-		bson.D{{"$match", bson.M{"marketType": "CN", "type": "stock", idsName: bson.M{"$nin": bson.A{math.NaN(), nil}}}}},
+		bson.D{{"$match", bson.M{"marketType": "CN", "type": "stock", idsName: bson.M{"$nin": bson.A{math.NaN(), nil, ""}}}}},
 		bson.D{{"$sort", bson.M{"pct_chg": -1}}},
 		bson.D{{"$group", bson.M{
 			"_id":     "$" + idsName,

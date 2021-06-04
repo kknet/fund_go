@@ -11,8 +11,7 @@ type RankOpt struct {
 	MarketType string // 市场类型
 	SortName   string
 	Sorted     bool //排序
-	Size       int  //分页
-	Page       int
+	Page       int64
 }
 
 // SearchOpt 搜索

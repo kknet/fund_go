@@ -3,6 +3,7 @@ package apiV1
 import (
 	"github.com/gin-gonic/gin"
 	"go.mongodb.org/mongo-driver/bson"
+	"strconv"
 	"strings"
 	"test/common"
 	"test/stock"
@@ -10,11 +11,11 @@ import (
 
 // GetChart 获取图表数据
 func GetChart(c *gin.Context) {
-	code := c.Query("code")
+	//code := c.Query("code")
 	//data := stock.GetSimpleMinute(code)
-	data := stock.GetMinuteChart(code)
+	//data := stock.GetMinuteChart(code)
 	c.JSON(200, gin.H{
-		"status": true, "data": data,
+		"status": true, "msg": "该接口暂不可用",
 	})
 }
 
@@ -37,15 +38,39 @@ func GetStockList(c *gin.Context) {
 	})
 }
 
+// GetRank 获取市场排名
 func GetRank(c *gin.Context) {
-	opt := common.RankOpt{
-		MarketType: c.Query("marketType"),
-		SortName:   c.DefaultQuery("sort", "vol"),
-		Sorted:     c.GetBool("sorted"),
-		Size:       c.GetInt("size"),
-		Page:       c.GetInt("page"),
+	var query string
+	opt := &common.RankOpt{}
+	//获取参数
+	//marketType
+	query, status := c.GetQuery("marketType")
+	if !status {
+		c.JSON(500, gin.H{
+			"status": false, "msg": "必须指定marketType参数",
+		})
+		return
 	}
-	data := stock.GetRank(&opt)
+	opt.MarketType = query
+	//sort
+	opt.SortName = c.DefaultQuery("sort", "amount")
+	query = c.DefaultQuery("sorted", "false")
+	switch query {
+	case "1", "true", "True":
+		opt.Sorted = true
+	default:
+		opt.Sorted = false
+	}
+	//page
+	page := c.DefaultQuery("page", "1")
+	opt.Page, _ = strconv.ParseInt(page, 10, 64)
+
+	data := stock.GetRank(opt)
+	// 可指定chart, 获取简略图表数据
+	switch c.Query("chart") {
+	case "minute", "trends":
+		data = common.GoFunc(data, stock.AddSimpleMinute)
+	}
 	c.JSON(200, gin.H{
 		"status": true, "data": data,
 	})

@@ -55,7 +55,7 @@ func AddSimpleMinute(items bson.M) {
 	json.Get(body, "data", "trends").ToVal(&info)
 
 	// 间隔
-	space := 2
+	space := 3
 	results := make([]float64, 0)
 
 	for i := len(info) % space; i < len(info); i += space {
@@ -102,11 +102,16 @@ func GetNorthFlow() {
 // GetRank 全市场排行
 func GetRank(opt *common.RankOpt) []bson.M {
 	var results []bson.M
-	err := coll.Find(ctx, bson.M{"marketType": opt.MarketType, "type": "stock"}).Limit(20).All(&results)
+
+	sortName := opt.SortName
+	if opt.Sorted == false {
+		sortName = "-" + sortName
+	}
+	err := coll.Find(ctx, bson.M{"marketType": opt.MarketType, "type": "stock"}).Limit(opt.Page * 20).Sort(sortName).All(&results)
 	if err != nil {
 		log.Println(err)
 	}
-	return results
+	return results[(opt.Page-1)*20:]
 }
 
 // GetPanKou  获取五档明细
