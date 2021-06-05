@@ -14,7 +14,7 @@ import (
 	"strconv"
 	"strings"
 	"test/common"
-	"test/myMongo"
+	"test/download"
 )
 
 //type minute struct {
@@ -31,12 +31,12 @@ var json = jsoniter.ConfigCompatibleWithStandardLibrary
 var ctx = context.Background()
 
 // mongo
-var coll = myMongo.ConnectMongo()
+var coll = download.ConnectMongo("AllStock")
 
 // GetStockList 获取多只股票信息
 func GetStockList(codes []string) []bson.M {
 	var results []bson.M
-	err := coll.Find(ctx, bson.M{"_id": bson.M{"$in": codes}}).Limit(50).All(&results)
+	err := coll.Find(ctx, bson.M{"_id": bson.M{"$in": codes}}).Limit(40).All(&results)
 	if err != nil {
 		log.Println(err)
 	}
@@ -75,7 +75,7 @@ func AddSimpleMinute(items bson.M) {
 }
 
 // Search 搜索股票
-func Search(input string, marketType string) interface{} {
+func Search(input string, marketType string) []bson.M {
 	var results []bson.M
 	// 先搜索CN
 	match := bson.M{"$or": bson.A{

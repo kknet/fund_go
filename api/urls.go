@@ -46,7 +46,7 @@ func GetRank(c *gin.Context) {
 	//marketType
 	query, status := c.GetQuery("marketType")
 	if !status {
-		c.JSON(500, gin.H{
+		c.JSON(400, gin.H{
 			"status": false, "msg": "必须指定marketType参数",
 		})
 		return

@@ -1,7 +1,6 @@
 package download
 
 import (
-	"context"
 	jsoniter "github.com/json-iterator/go"
 	"go.mongodb.org/mongo-driver/bson"
 	"log"
@@ -14,7 +13,6 @@ const (
 	URL = "https://push2.eastmoney.com/api/qt/clist/get?"
 )
 
-var ctx = context.Background()
 var json = jsoniter.ConfigCompatibleWithStandardLibrary
 
 // MyChan 通道
@@ -71,7 +69,7 @@ func getEastMoney(marketType string) {
 	}
 	url := URL + "po=1&fid=f6&pz=8000&np=1&fltt=2&pn=1&fs=" + fs[marketType] + "&fields="
 	// 重命名
-	rename := bson.M{
+	rename := map[string]string{
 		"f2": "price", "f3": "pct_chg", "f5": "vol", "f6": "amount", "f7": "amp", "f15": "high", "f16": "low",
 		"f17": "open", "f12": "code", "f10": "vr", "f13": "cid", "f14": "name", "f18": "close",
 		"f22": "涨速", "f23": "pb", "f33": "wb",
@@ -85,7 +83,7 @@ func getEastMoney(marketType string) {
 		"f66": "main_huge", "f72": "main_big", "f78": "main_mid", "f84": "main_small", "f184": "main_pct",
 	}
 	if marketType == "CNIndex" {
-		rename = bson.M{
+		rename = map[string]string{
 			"f2": "price", "f3": "pct_chg", "f5": "vol", "f6": "amount", "f7": "amp", "f15": "high", "f16": "low",
 			"f17": "open", "f12": "code", "f14": "name", "f18": "close", "f8": "tr", "f13": "cid",
 		}
@@ -106,7 +104,7 @@ func getEastMoney(marketType string) {
 		str := json.Get(body, "data", "diff").ToString()
 		//改名
 		for i, item := range rename {
-			str = strings.Replace(str, i+"\"", item.(string)+"\"", -1)
+			str = strings.Replace(str, i+"\"", item+"\"", -1)
 		}
 		// json解析
 		var temp []bson.M
