@@ -5,8 +5,8 @@ import (
 	"go.mongodb.org/mongo-driver/bson"
 	"strconv"
 	"strings"
+	"test/api/stock"
 	"test/common"
-	"test/stock"
 )
 
 // GetChart 获取图表数据

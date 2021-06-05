@@ -7,7 +7,6 @@ import (
 	"log"
 	"strings"
 	"test/common"
-	"test/marketime"
 	"time"
 )
 
@@ -117,7 +116,7 @@ func getEastMoney(marketType string) {
 		writeToMongo(temp)
 		// 更新完成后传入通道
 		//MyChan <- true
-		for !marketime.IsOpen(marketType) {
+		for !common.IsOpen(marketType) {
 			time.Sleep(time.Millisecond * 100)
 		}
 		time.Sleep(time.Second * 1)
@@ -129,5 +128,5 @@ func GoDownload() {
 	go getEastMoney("CN")
 	go getEastMoney("CNIndex")
 	go getEastMoney("HK")
-	//go getEastMoney("US")
+	go getEastMoney("US")
 }

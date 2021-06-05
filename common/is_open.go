@@ -1,4 +1,4 @@
-package marketime
+package common
 
 import (
 	"time"

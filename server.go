@@ -3,7 +3,7 @@ package main
 import (
 	"github.com/gin-gonic/gin"
 	"net/http"
-	"test/apiV1"
+	"test/api"
 	"test/download"
 )
 

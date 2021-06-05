@@ -9,8 +9,8 @@ import (
 	"reflect"
 	"strings"
 	"sync"
+	"test/api/stock"
 	"test/download"
-	"test/stock"
 	"time"
 )
 
