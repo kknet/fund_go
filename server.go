@@ -11,7 +11,7 @@ import (
 func main() {
 	// 启动后台下载
 	download.GoDownload()
-	download.GetFina()
+	//download.GetFina()
 
 	// 设置日志
 	//gin.DisableConsoleColor()

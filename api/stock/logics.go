@@ -8,7 +8,6 @@ import (
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/mongo"
 	"io/ioutil"
-	"log"
 	"math"
 	"net/http"
 	"strconv"
@@ -16,15 +15,6 @@ import (
 	"test/common"
 	"test/download"
 )
-
-//type minute struct {
-//	Time    string  `json:"time"`
-//	Price   float64 `json:"price"`
-//	Vol     float64 `json:"vol"`
-//	Amount  float64 `json:"amount"`
-//	Net     float64 `json:"net"`      // 资金净流入
-//	MainNet float64 `json:"main_net"` // 大单净流入
-//}
 
 // jsoniter
 var json = jsoniter.ConfigCompatibleWithStandardLibrary
@@ -35,12 +25,9 @@ var coll = download.ConnectMongo("AllStock")
 
 // GetStockList 获取多只股票信息
 func GetStockList(codes []string) []bson.M {
-	var results []bson.M
-	err := coll.Find(ctx, bson.M{"_id": bson.M{"$in": codes}}).Limit(40).All(&results)
-	if err != nil {
-		log.Println(err)
-	}
-	return results
+	var data []bson.M
+	_ = coll.Find(ctx, bson.M{"_id": bson.M{"$in": codes}}).Limit(40).All(&data)
+	return data
 }
 
 // AddSimpleMinute 添加简略分时行情
@@ -83,11 +70,8 @@ func Search(input string, marketType string) []bson.M {
 		bson.M{"_id": bson.M{"$regex": input, "$options": "i"}, "marketType": marketType, "type": "stock"},
 		bson.M{"name": bson.M{"$regex": input, "$options": "i"}, "marketType": marketType, "type": "stock"},
 	}}
-	// 按成交量排序
-	err := coll.Find(ctx, match).Limit(12).All(&results)
-	if err != nil {
-		log.Println(err)
-	}
+	// 按成交额排序
+	_ = coll.Find(ctx, match).Limit(12).All(&results)
 	return results
 }
 
@@ -114,10 +98,7 @@ func GetRank(opt *common.RankOpt) []bson.M {
 	if opt.Sorted == false {
 		sortName = "-" + sortName
 	}
-	err := coll.Find(ctx, bson.M{"marketType": opt.MarketType, "type": "stock"}).Limit(opt.Page * size).Sort(sortName).All(&results)
-	if err != nil {
-		log.Println(err)
-	}
+	_ = coll.Find(ctx, bson.M{"marketType": opt.MarketType, "type": "stock"}).Limit(opt.Page * size).Sort(sortName).All(&results)
 	return results[(opt.Page-1)*size:]
 }
 
@@ -125,6 +106,10 @@ func GetRank(opt *common.RankOpt) []bson.M {
 func GetPanKou(code string) bson.M {
 	// 格式化代码为雪球格式
 	code, err := FormatStock(code)
+	if err != nil {
+		return bson.M{"msg": "代码格式错误"}
+	}
+
 	url := "https://stock.xueqiu.com/v5/stock/realtime/pankou.json?&symbol=" + code
 	body, err := common.NewGetRequest(url, true).Do()
 	if err != nil {
@@ -132,15 +117,18 @@ func GetPanKou(code string) bson.M {
 	}
 	str := json.Get(body, "data").ToString()
 	// json解析
-	var temp bson.M
-	_ = json.Unmarshal([]byte(str), &temp)
-	return temp
+	var data bson.M
+	_ = json.Unmarshal([]byte(str), &data)
+	return data
 }
 
 // GetRealtimeTicks 获取实时分笔成交
 func GetRealtimeTicks(code string) bson.M {
 	// 格式化代码为雪球格式
 	code, err := FormatStock(code)
+	if err != nil {
+		return bson.M{"msg": "代码格式错误"}
+	}
 
 	url := "https://stock.xueqiu.com/v5/stock/history/trade.json?&count=50&symbol=" + code
 	body, err := common.NewGetRequest(url, true).Do()
@@ -164,8 +152,7 @@ func GetRealtimeTicks(code string) bson.M {
 	return bson.M{"data": results}
 }
 
-// FormatStock 股票代码格式化
-// targetType: XeuQiu
+// FormatStock 股票代码格式化为雪球代码
 func FormatStock(input string) (string, error) {
 	item := strings.Split(input, ".")
 	var code string
@@ -185,76 +172,6 @@ func FormatStock(input string) (string, error) {
 	return code, nil
 }
 
-// GetMinuteChart 获取分时行情
-//func GetMinuteChart(code string) bson.M {
-//	// 获取cid
-//	items := GetStockList([]string{code})[0]
-//	cid := int(items["cid"].(float64))
-//	symbol := strings.Split(code, ".")[0]
-//
-//	url := "https://push2.eastmoney.com/api/qt/stock/details/get?fields1=f1,f4&fields2=f51,f52,f53,f55&pos=-50000&secid="
-//	url += strconv.Itoa(cid) + "." + symbol
-//	body, err := common.NewGetRequest(url).Do()
-//	if err != nil {
-//		return bson.M{}
-//	}
-//	str := json.Get(body, "data", "details").ToString()
-//
-//	var info []string
-//	_ = json.Unmarshal([]byte(str), &info)
-//
-//	// 初始化
-//	results := make([]minute, 0)
-//	var amount, sumNet, sumMainNet, price float64
-//
-//	last := json.Get(body, "data", "prePrice").ToFloat64()
-//	lastTime := ""
-//	var p *minute
-//	// 根据每分钟迭代
-//	for _, str = range info {
-//		item := strings.Split(str, ",")
-//
-//		// 新的一分钟
-//		if lastTime != item[0][0:5] {
-//			p = &minute{
-//				Time:    item[0][0:5],
-//				Price:   last,
-//				Vol:     0,
-//				Amount:  0,
-//				Net:     0,
-//				MainNet: 0,
-//			}
-//			lastTime = item[0][0:5]
-//			results = append(results, *p)
-//		}
-//		price, _ = strconv.ParseFloat(item[1], 2)
-//		last = price
-//		vol, _ := strconv.ParseFloat(item[2], 2)
-//		p.Vol += vol
-//
-//		amount = price * vol
-//		p.Amount += amount
-//
-//		//累加 1主动卖 2主动买
-//		if item[3] == "2" {
-//			sumNet += amount
-//			// 大单
-//			if amount >= 100000 {
-//				sumMainNet += amount
-//			}
-//		} else if item[3] == "1" {
-//			sumNet += amount * -1
-//			// 大单
-//			if amount >= 100000 {
-//				sumMainNet += amount * -1
-//			}
-//		}
-//		p.Net = sumNet
-//		p.MainNet = sumMainNet
-//	}
-//	return bson.M{"chart": results, "items": items}
-//}
-
 // GetNumbers 获取涨跌分布
 func GetNumbers(marketType string) bson.M {
 
@@ -272,9 +189,9 @@ func GetNumbers(marketType string) bson.M {
 	pct := temp[0]["pct_chg"].(bson.A)
 	wb := temp[0]["wb"].(bson.A)
 
-	for i := range pct {
+	for i := range temp {
 		p := pct[i].(float64) //涨跌幅pct_chg
-		w := wb[i].(float64)  //委比wb
+		w := wb[i].(float64)
 
 		if p < -7 {
 			res[1]++
@@ -318,25 +235,34 @@ func GetNumbers(marketType string) bson.M {
 	return bson.M{"label": label, "value": res}
 }
 
-// GetIndustry 获取板块行情 marketType = CN,HK,US
+// GetIndustry 获取板块行情 marketType=CN
 func GetIndustry(idsName string) []bson.M {
 	var results []bson.M
 	_ = coll.Aggregate(ctx, mongo.Pipeline{
 		bson.D{{"$match", bson.M{"marketType": "CN", "type": "stock", idsName: bson.M{"$nin": bson.A{math.NaN(), nil, ""}}}}},
 		bson.D{{"$sort", bson.M{"pct_chg": -1}}},
 		bson.D{{"$group", bson.M{
-			"_id":     "$" + idsName,
-			"max_pct": bson.M{"$first": "$pct_chg"},
-			"count":   bson.M{"$sum": 1},
-			"领涨股":     bson.M{"$first": "$name"},
-			"主力净流入":   bson.M{"$sum": "$main_net"},
-			"mc":      bson.M{"$sum": "$mc"},
-			"power":   bson.M{"$sum": bson.M{"$multiply": bson.A{"$mc", "$pct_chg"}}},
+			"_id":         "$" + idsName,
+			"max_pct":     bson.M{"$first": "$pct_chg"},
+			"count":       bson.M{"$sum": 1},
+			"领涨股":         bson.M{"$first": "$name"},
+			"主力净流入":       bson.M{"$sum": "$main_net"},
+			"mc":          bson.M{"$sum": "$mc"},
+			"pe_ttm":      bson.M{"$avg": "$pe_ttm"},
+			"pb":          bson.M{"$avg": "$pb"},
+			"vol":         bson.M{"$sum": "$vol"},
+			"amount":      bson.M{"$sum": "$amount"},
+			"total_share": bson.M{"$sum": "$total_share"},
+			"power":       bson.M{"$sum": bson.M{"$multiply": bson.A{"$mc", "$pct_chg"}}},
 		}}},
 	}).All(&results)
+	// 由权重计算涨跌幅
 	for _, i := range results {
 		i["pct_chg"] = i["power"].(float64) / i["mc"].(float64)
+		// 换手率
+		i["tr"] = i["vol"].(float64) / i["total_share"].(float64) * 10000
 		delete(i, "power")
+		delete(i, "total_share")
 	}
 	return results
 }
