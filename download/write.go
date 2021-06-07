@@ -4,7 +4,6 @@ import (
 	"context"
 	"github.com/qiniu/qmgo"
 	"go.mongodb.org/mongo-driver/bson"
-	"log"
 )
 
 var realColl = ConnectMongo("AllStock")
@@ -32,15 +31,6 @@ func writeToMongo(stock []bson.M) {
 			//log.Println(err)
 		}
 	}
-}
-
-// 更新Fina数据
-func writeToFina(data []bson.M) {
-	err := finaColl.DropCollection(ctx)
-	if err != nil {
-		log.Println(err)
-	}
-	_, err = finaColl.InsertMany(ctx, data)
 }
 
 // 初始化插入

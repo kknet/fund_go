@@ -19,18 +19,22 @@ var json = jsoniter.ConfigCompatibleWithStandardLibrary
 var MyChan = make(chan bool)
 
 // 计算股票指标
-func setStockData(stocks []bson.M, marketType string) []bson.M {
-	var results []bson.M
+func setStockData(stocks []bson.M, marketType string) {
 	for _, s := range stocks {
 		//代码格式
-		if marketType == "CN" {
+		switch marketType {
+
+		case "CN":
 			if s["code"].(string)[0] == '6' {
 				s["code"] = s["code"].(string) + ".SH"
 			} else {
 				s["code"] = s["code"].(string) + ".SZ"
 			}
-			// 指数
-		} else if marketType == "CNIndex" {
+			s["marketType"] = "CN"
+			s["type"] = "stock"
+			s["_id"] = s["code"]
+
+		case "CNIndex":
 			if s["code"].(string)[0] == '0' {
 				s["code"] = s["code"].(string) + ".SH"
 			} else {
@@ -38,25 +42,25 @@ func setStockData(stocks []bson.M, marketType string) []bson.M {
 			}
 			s["marketType"] = "CN"
 			s["type"] = "index"
-			goto APP
-		} else {
+			s["_id"] = s["code"]
+			continue
+
+		case "HK", "US":
 			s["code"] = s["code"].(string) + "." + marketType
+			s["marketType"] = marketType
+			s["type"] = "stock"
+			s["_id"] = s["code"]
 		}
+
 		// 是股票
 		if s["total_share"].(float64) > 0 {
-			s["type"] = "stock"
-			s["marketType"] = marketType
 			s["main_net"] = s["main_huge"].(float64) + s["main_big"].(float64)
 			s["main_in"] = s["main_net"]
 			s["main_out"] = s["main_net"]
 			s["mc"] = s["total_share"].(float64) * s["price"].(float64)
 			s["fmc"] = s["float_share"].(float64) * s["price"].(float64)
 		}
-	APP:
-		s["_id"] = s["code"]
-		results = append(results, s)
 	}
-	return results
 }
 
 // 下载数据
@@ -72,11 +76,10 @@ func getEastMoney(marketType string) {
 	rename := map[string]string{
 		"f2": "price", "f3": "pct_chg", "f5": "vol", "f6": "amount", "f7": "amp", "f15": "high", "f16": "low",
 		"f17": "open", "f12": "code", "f10": "vr", "f13": "cid", "f14": "name", "f18": "close",
-		"f22": "涨速", "f23": "pb", "f33": "wb",
-		// "f34": "外盘", "f35": "内盘",
-		"f24": "pct60day", "f25": "pct_current_year", "f11": "pct5min",
+		"f23": "pb", "f33": "wb",
+		// "f34": "外盘", "f35": "内盘", "f22": "涨速", "f11": "pct5min", "f24": "pct60day", "f25": "pct_current_year",
 		"f38": "total_share", "f39": "float_share", "f115": "pe_ttm",
-		//"f100": "EMIds",
+		// "f100": "EMIds",
 		// 财务
 		// "f37": "roe", "f40": "营收", "f41": "营收同比", "f45": "净利润", "f46": "净利润同比",
 		// 资金
@@ -110,14 +113,14 @@ func getEastMoney(marketType string) {
 		var temp []bson.M
 		_ = json.Unmarshal([]byte(str), &temp)
 		// 计算数据
-		temp = setStockData(temp, marketType)
+		setStockData(temp, marketType)
 		writeToMongo(temp)
 		// 更新完成后传入通道
 		//MyChan <- true
 		for !common.IsOpen(marketType) {
 			time.Sleep(time.Millisecond * 100)
 		}
-		time.Sleep(time.Second * 1)
+		time.Sleep(time.Millisecond * 300)
 	}
 }
 

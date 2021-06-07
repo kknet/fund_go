@@ -3,7 +3,8 @@ package main
 import (
 	"github.com/gin-gonic/gin"
 	"net/http"
-	"test/api"
+	apiV1 "test/api"
+	"test/api/real"
 	"test/download"
 )
 
@@ -11,7 +12,6 @@ import (
 func main() {
 	// 启动后台下载
 	download.GoDownload()
-	//download.GetFina()
 
 	// 设置日志
 	//gin.DisableConsoleColor()
@@ -35,23 +35,22 @@ func main() {
 
 	// CList
 	CList := Real.Group("/clist")
-	CList.GET("/get", apiV1.GetStockList)
-	CList.GET("/rank", apiV1.GetRank)
-	CList.GET("/search", apiV1.Search)
+	CList.GET("/get", real.GetCList)
+	CList.GET("/rank", real.GetRank)
+	CList.GET("/search", real.Search)
 
-	Real.GET("/chart", apiV1.GetChart)
-	Real.GET("/market", apiV1.GetMarket)
-	Real.GET("/ticks", apiV1.GetTicks)
-	Real.GET("/pankou", apiV1.GetPanKou)
+	Real.GET("/chart", real.GetChart)
+	Real.GET("/market", real.GetMarket)
+	Real.GET("/ticks", real.GetTicks)
+	Real.GET("/pankou", real.GetPanKou)
 
 	// WebSocket
 	wsStock := ws.Group("/stock")
-	wsStock.GET("/items", apiV1.Items)
-	wsStock.GET("/simple", apiV1.Simple)
+	wsStock.GET("/clist", apiV1.CList)
 
 	// 错误处理
 	r.NoRoute(func(context *gin.Context) {
-		context.JSON(http.StatusNotFound, gin.H{"status": 404, "msg": "page not found"})
+		context.JSON(http.StatusNotFound, gin.H{"status": 404, "msg": "未找到该页面"})
 	})
 
 	// 启动

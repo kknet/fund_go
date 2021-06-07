@@ -1,11 +1,10 @@
-package apiV1
+package real
 
 import (
 	"github.com/gin-gonic/gin"
 	"go.mongodb.org/mongo-driver/bson"
 	"strconv"
 	"strings"
-	"test/api/stock"
 	"test/common"
 )
 
@@ -19,19 +18,19 @@ func GetChart(c *gin.Context) {
 	})
 }
 
-// GetStockList 获取股票列表
-func GetStockList(c *gin.Context) {
+// GetCList 获取股票列表
+func GetCList(c *gin.Context) {
 	var data []bson.M
 	// 指定code
 	codes := c.Query("code")
 	if codes != "" {
 		clist := strings.Split(codes, ",")
-		data = stock.GetStockList(clist)
+		data = GetStockList(clist)
 	}
 	// 可指定chart, 获取简略图表数据
 	switch c.Query("chart") {
 	case "minute", "trends":
-		data = common.GoFunc(data, stock.AddSimpleMinute)
+		data = common.GoFunc(data, AddSimpleMinute)
 	}
 	c.JSON(200, gin.H{
 		"status": true, "data": data,
@@ -65,11 +64,11 @@ func GetRank(c *gin.Context) {
 	page := c.DefaultQuery("page", "1")
 	opt.Page, _ = strconv.ParseInt(page, 10, 64)
 
-	data := stock.GetRank(opt)
+	data := getRank(opt)
 	// 可指定chart, 获取简略图表数据
 	switch c.Query("chart") {
 	case "minute", "trends":
-		data = common.GoFunc(data, stock.AddSimpleMinute)
+		data = common.GoFunc(data, AddSimpleMinute)
 	}
 	c.JSON(200, gin.H{
 		"status": true, "data": data,
@@ -78,8 +77,7 @@ func GetRank(c *gin.Context) {
 
 func Search(c *gin.Context) {
 	input := c.Query("input")
-	marketType := c.Query("marketType")
-	data := stock.Search(input, marketType)
+	data := search(input)
 	c.JSON(200, gin.H{
 		"status": true, "data": data,
 	})
@@ -91,16 +89,17 @@ func GetMarket(c *gin.Context) {
 	if marketType == "CN" {
 		c.JSON(200, gin.H{
 			"status": true, "data": bson.M{
-				"numbers":  stock.GetNumbers(marketType),
-				"industry": stock.GetIndustry("industry"),
-				"sw":       stock.GetIndustry("sw"),
-				"area":     stock.GetIndustry("area"),
+				"numbers":  getNumbers(marketType),
+				"industry": getIndustry("industry"),
+				"sw":       getIndustry("sw"),
+				"area":     getIndustry("area"),
 			},
 		})
 	} else {
 		c.JSON(200, gin.H{
 			"status": true, "data": bson.M{
-				"numbers": stock.GetNumbers(marketType),
+				"numbers":  getNumbers(marketType),
+				"industry": nil,
 			},
 		})
 	}
@@ -108,7 +107,7 @@ func GetMarket(c *gin.Context) {
 
 func GetTicks(c *gin.Context) {
 	code := c.Query("code")
-	data := stock.GetRealtimeTicks(code)
+	data := GetRealtimeTicks(code)
 	c.JSON(200, gin.H{
 		"status": true, "data": data,
 	})
@@ -116,7 +115,7 @@ func GetTicks(c *gin.Context) {
 
 func GetPanKou(c *gin.Context) {
 	code := c.Query("code")
-	data := stock.GetPanKou(code)
+	data := PanKou(code)
 	c.JSON(200, gin.H{
 		"status": true, "data": data,
 	})

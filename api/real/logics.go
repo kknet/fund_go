@@ -1,4 +1,4 @@
-package stock
+package real
 
 import (
 	"context"
@@ -7,9 +7,8 @@ import (
 	jsoniter "github.com/json-iterator/go"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/mongo"
-	"io/ioutil"
+	"log"
 	"math"
-	"net/http"
 	"strconv"
 	"strings"
 	"test/common"
@@ -20,7 +19,7 @@ import (
 var json = jsoniter.ConfigCompatibleWithStandardLibrary
 var ctx = context.Background()
 
-// mongo
+// mongo collection
 var coll = download.ConnectMongo("AllStock")
 
 // GetStockList 获取多只股票信息
@@ -41,7 +40,6 @@ func AddSimpleMinute(items bson.M) {
 	url += strconv.Itoa(cid) + "." + symbol
 
 	body, _ := common.NewGetRequest(url).Do()
-	preClose := json.Get(body, "data", "preClose").ToFloat32()
 	total := json.Get(body, "data", "trendsTotal").ToFloat32()
 	timestamp := json.Get(body, "data", "time").ToInt()
 
@@ -51,46 +49,38 @@ func AddSimpleMinute(items bson.M) {
 	space := 3
 	results := make([]float64, 0)
 
-	for i := len(info) % space; i < len(info); i += space {
+	for i := 0; i < len(info); i += space {
 		item := strings.Split(info[i], ",")[1]
 		data, _ := strconv.ParseFloat(item, 8)
 		results = append(results, data)
 	}
+	results = append(results, items["price"].(float64))
+
 	items["chart"] = bson.M{
-		"trends": results, "close": preClose, "total": total, "timestamp": timestamp, "space": space,
+		"trends": results, "total": total, "timestamp": timestamp, "space": space,
 	}
 }
 
 // Search 搜索股票
-func Search(input string, marketType string) []bson.M {
+func search(input string) []bson.M {
 	var results []bson.M
-	// 先搜索CN
 	match := bson.M{"$or": bson.A{
 		// 正则匹配 不区分大小写
-		bson.M{"_id": bson.M{"$regex": input, "$options": "i"}, "marketType": marketType, "type": "stock"},
-		bson.M{"name": bson.M{"$regex": input, "$options": "i"}, "marketType": marketType, "type": "stock"},
+		bson.M{"_id": bson.M{"$regex": input, "$options": "i"}, "marketType": "CN", "type": "stock"},
+		bson.M{"name": bson.M{"$regex": input, "$options": "i"}, "marketType": "CN", "type": "stock"},
+
+		bson.M{"_id": bson.M{"$regex": input, "$options": "i"}, "marketType": "HK"},
+		bson.M{"name": bson.M{"$regex": input, "$options": "i"}, "marketType": "HK"},
+
+		bson.M{"_id": bson.M{"$regex": input, "$options": "i"}, "marketType": "US"},
+		bson.M{"name": bson.M{"$regex": input, "$options": "i"}, "marketType": "US"},
 	}}
-	// 按成交额排序
 	_ = coll.Find(ctx, match).Limit(12).All(&results)
 	return results
 }
 
-// GetNorthFlow 北向资金流向
-func GetNorthFlow() {
-	url := "https://push2.eastmoney.com/api/qt/kamt.rtmin/get?fields1=f1,f3&fields2=f52,f54,f56"
-	res, err := http.Get(url)
-	if err != nil {
-		panic(err)
-	}
-	// 关闭连接
-	defer res.Body.Close()
-	// 读取内容
-	body, err := ioutil.ReadAll(res.Body)
-	fmt.Println(body)
-}
-
-// GetRank 全市场排行
-func GetRank(opt *common.RankOpt) []bson.M {
+// getRank 全市场排行
+func getRank(opt *common.RankOpt) []bson.M {
 	var results []bson.M
 	var size int64 = 20
 
@@ -102,14 +92,13 @@ func GetRank(opt *common.RankOpt) []bson.M {
 	return results[(opt.Page-1)*size:]
 }
 
-// GetPanKou  获取五档明细
-func GetPanKou(code string) bson.M {
+// PanKou  获取五档明细
+func PanKou(code string) bson.M {
 	// 格式化代码为雪球格式
-	code, err := FormatStock(code)
+	code, err := formatStock(code)
 	if err != nil {
 		return bson.M{"msg": "代码格式错误"}
 	}
-
 	url := "https://stock.xueqiu.com/v5/stock/realtime/pankou.json?&symbol=" + code
 	body, err := common.NewGetRequest(url, true).Do()
 	if err != nil {
@@ -125,11 +114,10 @@ func GetPanKou(code string) bson.M {
 // GetRealtimeTicks 获取实时分笔成交
 func GetRealtimeTicks(code string) bson.M {
 	// 格式化代码为雪球格式
-	code, err := FormatStock(code)
+	code, err := formatStock(code)
 	if err != nil {
 		return bson.M{"msg": "代码格式错误"}
 	}
-
 	url := "https://stock.xueqiu.com/v5/stock/history/trade.json?&count=50&symbol=" + code
 	body, err := common.NewGetRequest(url, true).Do()
 	if err != nil {
@@ -152,8 +140,8 @@ func GetRealtimeTicks(code string) bson.M {
 	return bson.M{"data": results}
 }
 
-// FormatStock 股票代码格式化为雪球代码
-func FormatStock(input string) (string, error) {
+// formatStock 股票代码格式化为雪球代码
+func formatStock(input string) (string, error) {
 	item := strings.Split(input, ".")
 	var code string
 
@@ -172,8 +160,8 @@ func FormatStock(input string) (string, error) {
 	return code, nil
 }
 
-// GetNumbers 获取涨跌分布
-func GetNumbers(marketType string) bson.M {
+// getNumbers 获取涨跌分布
+func getNumbers(marketType string) bson.M {
 
 	var temp []bson.M
 	_ = coll.Aggregate(ctx, mongo.Pipeline{
@@ -235,14 +223,15 @@ func GetNumbers(marketType string) bson.M {
 	return bson.M{"label": label, "value": res}
 }
 
-// GetIndustry 获取板块行情 marketType=CN
-func GetIndustry(idsName string) []bson.M {
+// getIndustry 获取板块行情
+// marketType=CN; name=sw, industry, area
+func getIndustry(name string) []bson.M {
 	var results []bson.M
 	_ = coll.Aggregate(ctx, mongo.Pipeline{
-		bson.D{{"$match", bson.M{"marketType": "CN", "type": "stock", idsName: bson.M{"$nin": bson.A{math.NaN(), nil, ""}}}}},
+		bson.D{{"$match", bson.M{"marketType": "CN", "type": "stock", name: bson.M{"$nin": bson.A{math.NaN(), nil, ""}}}}},
 		bson.D{{"$sort", bson.M{"pct_chg": -1}}},
 		bson.D{{"$group", bson.M{
-			"_id":         "$" + idsName,
+			"_id":         "$" + name,
 			"max_pct":     bson.M{"$first": "$pct_chg"},
 			"count":       bson.M{"$sum": 1},
 			"领涨股":         bson.M{"$first": "$name"},
@@ -265,4 +254,18 @@ func GetIndustry(idsName string) []bson.M {
 		delete(i, "total_share")
 	}
 	return results
+}
+
+// getNorthFlow 北向资金流向
+func getNorthFlow() {
+	url := "https://push2.eastmoney.com/api/qt/kamt.rtmin/get?fields1=f1,f3&fields2=f52,f54,f56"
+	body, err := common.NewGetRequest(url).Do()
+	if err != nil {
+		log.Println(err)
+	}
+	str := json.Get(body, "data", "s2n").ToString()
+	// json解析
+	var temp []string
+	_ = json.Unmarshal([]byte(str), &temp)
+	fmt.Println(temp)
 }
