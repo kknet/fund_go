@@ -1,7 +1,6 @@
 package download
 
 import (
-	"fmt"
 	"fund_go2/common"
 	"github.com/go-gota/gota/dataframe"
 	jsoniter "github.com/json-iterator/go"
@@ -105,12 +104,10 @@ func getEastMoney(marketType string) {
 
 	request := common.NewGetRequest(url)
 	for {
-		start := time.Now()
 		body, err := request.Do()
 		if err != nil {
 			log.Println("下载股票数据发生错误，", err.Error())
 		}
-		fmt.Println("下载数据用时：", time.Since(start))
 		str := json.Get(body, "data", "diff").ToString()
 
 		CNStock = dataframe.ReadJSON(strings.NewReader(str))
@@ -118,12 +115,10 @@ func getEastMoney(marketType string) {
 		for key, value := range rename {
 			CNStock = CNStock.Rename(value, key)
 		}
-		fmt.Println(CNStock)
 
-		fmt.Println("总计用时：", time.Since(start))
-		//for !common.IsOpen(marketType) {
-		//	time.Sleep(time.Millisecond * 100)
-		//}
+		for !common.IsOpen(marketType) {
+			time.Sleep(time.Millisecond * 100)
+		}
 		time.Sleep(time.Millisecond * 1000)
 	}
 }
