@@ -1,11 +1,11 @@
 package real
 
 import (
+	"fund_go2/common"
 	"github.com/gin-gonic/gin"
 	"go.mongodb.org/mongo-driver/bson"
 	"strconv"
 	"strings"
-	"test/common"
 )
 
 // GetChart 获取图表数据

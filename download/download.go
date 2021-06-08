@@ -1,11 +1,13 @@
 package download
 
 import (
+	"fmt"
+	"fund_go2/common"
+	"github.com/go-gota/gota/dataframe"
 	jsoniter "github.com/json-iterator/go"
 	"go.mongodb.org/mongo-driver/bson"
 	"log"
 	"strings"
-	"test/common"
 	"time"
 )
 
@@ -17,6 +19,9 @@ var json = jsoniter.ConfigCompatibleWithStandardLibrary
 
 // MyChan 通道
 var MyChan = make(chan bool)
+
+// CNStock 存储所有股票数据
+var CNStock dataframe.DataFrame
 
 // 计算股票指标
 func setStockData(stocks []bson.M, marketType string) {
@@ -77,11 +82,11 @@ func getEastMoney(marketType string) {
 		"f2": "price", "f3": "pct_chg", "f5": "vol", "f6": "amount", "f7": "amp", "f15": "high", "f16": "low",
 		"f17": "open", "f12": "code", "f10": "vr", "f13": "cid", "f14": "name", "f18": "close",
 		"f23": "pb", "f33": "wb",
-		// "f34": "外盘", "f35": "内盘", "f22": "涨速", "f11": "pct5min", "f24": "pct60day", "f25": "pct_current_year",
+		"f34": "外盘", "f35": "内盘", "f22": "涨速", "f11": "pct5min", "f24": "pct60day", "f25": "pct_current_year",
 		"f38": "total_share", "f39": "float_share", "f115": "pe_ttm",
-		// "f100": "EMIds",
+		"f100": "EMIds",
 		// 财务
-		// "f37": "roe", "f40": "营收", "f41": "营收同比", "f45": "净利润", "f46": "净利润同比",
+		//"f37": "roe", "f40": "营收", "f41": "营收同比", "f45": "净利润", "f46": "净利润同比",
 		// 资金
 		"f66": "main_huge", "f72": "main_big", "f78": "main_mid", "f84": "main_small", "f184": "main_pct",
 	}
@@ -100,34 +105,33 @@ func getEastMoney(marketType string) {
 
 	request := common.NewGetRequest(url)
 	for {
+		start := time.Now()
 		body, err := request.Do()
 		if err != nil {
 			log.Println("下载股票数据发生错误，", err.Error())
 		}
+		fmt.Println("下载数据用时：", time.Since(start))
 		str := json.Get(body, "data", "diff").ToString()
+
+		CNStock = dataframe.ReadJSON(strings.NewReader(str))
 		//改名
-		for i, item := range rename {
-			str = strings.Replace(str, i+"\"", item+"\"", -1)
+		for key, value := range rename {
+			CNStock = CNStock.Rename(value, key)
 		}
-		// json解析
-		var temp []bson.M
-		_ = json.Unmarshal([]byte(str), &temp)
-		// 计算数据
-		setStockData(temp, marketType)
-		writeToMongo(temp)
-		// 更新完成后传入通道
-		//MyChan <- true
-		for !common.IsOpen(marketType) {
-			time.Sleep(time.Millisecond * 100)
-		}
-		time.Sleep(time.Millisecond * 300)
+		fmt.Println(CNStock)
+
+		fmt.Println("总计用时：", time.Since(start))
+		//for !common.IsOpen(marketType) {
+		//	time.Sleep(time.Millisecond * 100)
+		//}
+		time.Sleep(time.Millisecond * 1000)
 	}
 }
 
 // GoDownload 主下载函数
 func GoDownload() {
 	go getEastMoney("CN")
-	go getEastMoney("CNIndex")
-	go getEastMoney("HK")
-	go getEastMoney("US")
+	//go getEastMoney("CNIndex")
+	//go getEastMoney("HK")
+	//go getEastMoney("US")
 }

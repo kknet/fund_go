@@ -1,11 +1,11 @@
 package main
 
 import (
+	apiV1 "fund_go2/api"
+	"fund_go2/api/real"
+	"fund_go2/download"
 	"github.com/gin-gonic/gin"
 	"net/http"
-	apiV1 "test/api"
-	"test/api/real"
-	"test/download"
 )
 
 /* 主函数 */

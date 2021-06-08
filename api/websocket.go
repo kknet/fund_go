@@ -1,12 +1,12 @@
 package apiV1
 
 import (
+	"fund_go2/api/real"
 	"github.com/gin-gonic/gin"
 	"github.com/gorilla/websocket"
 	"go.mongodb.org/mongo-driver/bson"
 	"net/http"
 	"strings"
-	"test/api/real"
 	"time"
 )
 

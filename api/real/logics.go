@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"fund_go2/common"
+	"fund_go2/download"
 	jsoniter "github.com/json-iterator/go"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/mongo"
@@ -11,8 +13,6 @@ import (
 	"math"
 	"strconv"
 	"strings"
-	"test/common"
-	"test/download"
 )
 
 // jsoniter
