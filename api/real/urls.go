@@ -20,7 +20,7 @@ func GetChart(c *gin.Context) {
 
 // GetCList 获取股票列表
 func GetCList(c *gin.Context) {
-	var data []bson.M
+	var data []map[string]interface{}
 	// 指定code
 	codes := c.Query("code")
 	if codes != "" {
@@ -41,11 +41,11 @@ func GetCList(c *gin.Context) {
 func GetRank(c *gin.Context) {
 	var query string
 	opt := &common.RankOpt{}
-	//获取参数
+
 	//marketType
 	query, status := c.GetQuery("marketType")
 	if !status {
-		c.JSON(400, gin.H{
+		c.JSON(200, gin.H{
 			"status": false, "msg": "必须指定marketType参数",
 		})
 		return
@@ -62,14 +62,14 @@ func GetRank(c *gin.Context) {
 	}
 	//page
 	page := c.DefaultQuery("page", "1")
-	opt.Page, _ = strconv.ParseInt(page, 10, 64)
+	opt.Page, _ = strconv.Atoi(page)
 
 	data := getRank(opt)
 	// 可指定chart, 获取简略图表数据
-	switch c.Query("chart") {
-	case "minute", "trends":
-		data = common.GoFunc(data, AddSimpleMinute)
-	}
+	//switch c.Query("chart") {
+	//case "minute", "trends":
+	//	data = common.GoFunc(data, AddSimpleMinute)
+	//}
 	c.JSON(200, gin.H{
 		"status": true, "data": data,
 	})
