@@ -1,58 +1,9 @@
 package download
 
 import (
-	"github.com/go-gota/gota/dataframe"
 	"github.com/go-gota/gota/series"
 	"log"
 )
-
-// 代码格式化
-func formatCode(df dataframe.DataFrame) dataframe.DataFrame {
-	codes := df.Col("code")
-	if &codes == nil {
-		log.Println("Col code is not exists!")
-		return df
-	}
-	col := df.Col("marketType")
-	if &col == nil {
-		log.Println("Col marketType is not exists!")
-		return df
-	}
-	marketType := col.Elem(0).String()
-	results := make([]string, codes.Len())
-
-	switch marketType {
-	case "CN":
-		for i := 0; i < codes.Len(); i++ {
-			c := codes.Elem(i).String()
-			if c[0] == '0' {
-				c += ".SZ"
-			} else {
-				c += ".SH"
-			}
-			results[i] = c
-		}
-	case "CNIndex":
-		for i := 0; i < codes.Len(); i++ {
-			c := codes.Elem(i).String()
-			if c[0] == '0' {
-				c += ".SH"
-			} else {
-				c += ".SZ"
-			}
-			results[i] = c
-		}
-	case "HK", "US":
-		for i := 0; i < codes.Len(); i++ {
-			c := codes.Elem(i).String() + "." + marketType
-			results[i] = c
-		}
-	}
-	t := series.Strings(results)
-	t.Name = "code"
-	df = df.Mutate(t)
-	return df
-}
 
 // 生成带初值的Series
 func newSeries(value interface{}, name string, len int) series.Series {
@@ -76,7 +27,7 @@ func newSeries(value interface{}, name string, len int) series.Series {
 }
 
 // Operation 运算操作
-// operation = +,-,*,/
+// operation = +, -, *, /
 // Type(s2) = Series, Int, Float
 func Operation(s1 series.Series, operation string, s2 interface{}) series.Series {
 	length := s1.Len()
@@ -97,12 +48,48 @@ func Operation(s1 series.Series, operation string, s2 interface{}) series.Series
 		// Series * Float
 	} else {
 		for i := range results {
-
 			results[i] = cal(s1.Elem(i).Float(), operation, s2.(float64))
 		}
 		return series.Floats(results)
 	}
 }
+
+// OperationString 字符串运算操作
+// Example: x=1, y=a+b, x=a*b (暂不支持加括号的运算)
+//func OperationString(str string, df dataframe.DataFrame) series.Series {
+//	//去除所有空格
+//	str = strings.Replace(str," ","",-1)
+//	equ := strings.Split(str, "=")
+//
+//	//匹配
+//	var left, right interface{}
+//	var op string
+//	var err error
+//
+//	for _,op = range []string{"+", "-", "*", "/"} {
+//		items := strings.Split(equ[1], op)
+//		if len(items) >= 2 {
+//			left, err = strconv.ParseFloat(items[0], 32)
+//			if err != nil {
+//				left = df.Col(items[0])
+//			}
+//
+//			right, err = strconv.ParseFloat(items[1], 32)
+//			if err != nil {
+//				right = df.Col(items[1])
+//			}
+//			break
+//		}
+//	}
+//	//计算
+//	length := df.Nrow()
+//	_, l1 := left.(series.Series)
+//	_, l2 := left.(float64)
+//	_, r1 := right.(series.Series)
+//	_, r2 := right.(float64)
+//
+//
+//}
 
 // 计算
 func cal(v1 float64, op string, v2 float64) float64 {

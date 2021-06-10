@@ -30,10 +30,15 @@ var coll = download.ConnectMongo("AllStock")
 
 // GetStockList 获取多只股票信息
 func GetStockList(codes []string) []map[string]interface{} {
-	a := download.CNStock.Filter(
-		dataframe.F{"codes", series.In, codes},
-	)
-	return a.Maps()
+	data := make([]map[string]interface{}, 0)
+
+	for _, df := range download.AllStock {
+		res := df.Filter(dataframe.F{Colname: "code", Comparator: series.In, Comparando: codes}).Maps()
+		for _, item := range res {
+			data = append(data, item)
+		}
+	}
+	return data
 }
 
 // AddSimpleMinute 添加简略分时行情
@@ -90,7 +95,7 @@ func getRank(opt *common.RankOpt) []map[string]interface{} {
 		indexes[i] = (opt.Page-1)*pageSize + i
 	}
 
-	data := download.CNStock.Arrange(
+	data := download.AllStock[opt.MarketType].Arrange(
 		dataframe.RevSort(opt.SortName),
 	).Subset(indexes)
 

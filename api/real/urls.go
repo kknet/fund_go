@@ -66,10 +66,10 @@ func GetRank(c *gin.Context) {
 
 	data := getRank(opt)
 	// 可指定chart, 获取简略图表数据
-	//switch c.Query("chart") {
-	//case "minute", "trends":
-	//	data = common.GoFunc(data, AddSimpleMinute)
-	//}
+	switch c.Query("chart") {
+	case "minute", "trends":
+		data = common.GoFunc(data, AddSimpleMinute)
+	}
 	c.JSON(200, gin.H{
 		"status": true, "data": data,
 	})
