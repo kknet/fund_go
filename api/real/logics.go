@@ -3,7 +3,6 @@ package real
 import (
 	"context"
 	"errors"
-	"fmt"
 	"fund_go2/common"
 	"fund_go2/download"
 	"github.com/go-gota/gota/dataframe"
@@ -30,12 +29,18 @@ var coll = download.ConnectMongo("AllStock")
 
 // GetStockList 获取多只股票信息
 func GetStockList(codes []string) []map[string]interface{} {
+	if len(codes) >= 50 {
+		return nil
+	}
 	data := make([]map[string]interface{}, 0)
 
-	for _, df := range download.AllStock {
-		res := df.Filter(dataframe.F{Colname: "code", Comparator: series.In, Comparando: codes}).Maps()
-		for _, item := range res {
-			data = append(data, item)
+	for _, c := range codes {
+		for _, df := range download.AllStock {
+			item := df.Filter(dataframe.F{Colname: "code", Comparator: series.Eq, Comparando: c}).Maps()
+			if len(item) > 0 {
+				data = append(data, item[0])
+				break
+			}
 		}
 	}
 	return data
@@ -70,20 +75,28 @@ func AddSimpleMinute(items map[string]interface{}) {
 }
 
 // Search 搜索股票
-func search(input string) []bson.M {
-	var results []bson.M
-	match := bson.M{"$or": bson.A{
-		// 正则匹配 不区分大小写
-		bson.M{"_id": bson.M{"$regex": input, "$options": "i"}, "marketType": "CN", "type": "stock"},
-		bson.M{"name": bson.M{"$regex": input, "$options": "i"}, "marketType": "CN", "type": "stock"},
+func search(input string) []map[string]interface{} {
+	var results []map[string]interface{}
 
-		bson.M{"_id": bson.M{"$regex": input, "$options": "i"}, "marketType": "HK"},
-		bson.M{"name": bson.M{"$regex": input, "$options": "i"}, "marketType": "HK"},
+	// 优先展示CN, HK、US按成交额自由排序
+	for _, mkt := range []string{"CN", "HK", "US", "CNIndex"} {
+		df := download.AllStock[mkt].Select([]string{"code", "name", "pct_chg", "price", "type", "marketType", "amount"})
 
-		bson.M{"_id": bson.M{"$regex": input, "$options": "i"}, "marketType": "US"},
-		bson.M{"name": bson.M{"$regex": input, "$options": "i"}, "marketType": "US"},
-	}}
-	_ = coll.Find(ctx, match).Limit(12).All(&results)
+		for i, item := range df.Select([]string{"code", "name"}).Records() {
+			//转化为大写
+			input = strings.ToUpper(input)
+			str := strings.ToUpper(item[0] + " " + item[1])
+
+			if strings.Contains(str, input) {
+				if i >= 1 {
+					results = append(results, df.Subset(i - 1).Maps()[0])
+					if len(results) > 12 {
+						return results
+					}
+				}
+			}
+		}
+	}
 	return results
 }
 
@@ -95,14 +108,17 @@ func getRank(opt *common.RankOpt) []map[string]interface{} {
 		indexes[i] = (opt.Page-1)*pageSize + i
 	}
 
-	data := download.AllStock[opt.MarketType].Arrange(
-		dataframe.RevSort(opt.SortName),
-	).Subset(indexes)
+	order := dataframe.RevSort(opt.SortName)
+	if opt.Sorted == true {
+		order = dataframe.Sort(opt.SortName)
+	}
+
+	data := download.AllStock[opt.MarketType].Arrange(order).Subset(indexes)
 
 	return data.Maps()
 }
 
-// PanKou  获取五档明细
+// PanKou 获取五档挂单明细
 func PanKou(code string) bson.M {
 	// 格式化代码为雪球格式
 	code, err := formatStock(code)
@@ -121,33 +137,26 @@ func PanKou(code string) bson.M {
 	return data
 }
 
-// GetRealtimeTicks 获取实时分笔成交
-func GetRealtimeTicks(code string) bson.M {
+// GetRealtimeTicks 获取最近分笔成交
+func GetRealtimeTicks(code string) (interface{}, error) {
 	// 格式化代码为雪球格式
 	code, err := formatStock(code)
 	if err != nil {
-		return bson.M{"msg": "代码格式错误"}
+		return nil, errors.New("代码格式错误")
 	}
 	url := "https://stock.xueqiu.com/v5/stock/history/trade.json?&count=50&symbol=" + code
 	body, err := common.NewGetRequest(url, true).Do()
 	if err != nil {
-		return bson.M{"msg": err.Error()}
+		return nil, errors.New("请求错误")
 	}
 	str := json.Get(body, "data", "items").ToString()
-	// json解析
-	var temp []bson.M
-	_ = json.Unmarshal([]byte(str), &temp)
 
-	results := make([]bson.M, len(temp))
-	for i, item := range temp {
-		results[i] = bson.M{
-			"price":     item["current"],
-			"type":      item["side"],
-			"timestamp": item["timestamp"],
-			"vol":       item["trade_volume"],
-		}
-	}
-	return bson.M{"data": results}
+	df := dataframe.ReadJSON(strings.NewReader(str)).
+		Select([]string{"current", "percent", "side", "timestamp", "trade_volume", "trade_unique_id"}).
+		Rename("price", "current").Rename("type", "side").
+		Rename("vol", "trade_volume").Rename("id", "trade_unique_id")
+
+	return df.Maps(), nil
 }
 
 // formatStock 股票代码格式化为雪球代码
@@ -266,16 +275,17 @@ func getIndustry(name string) []bson.M {
 	return results
 }
 
-// getNorthFlow 北向资金流向
-func getNorthFlow() {
+// GetNorthFlow 北向资金流向
+func GetNorthFlow() interface{} {
 	url := "https://push2.eastmoney.com/api/qt/kamt.rtmin/get?fields1=f1,f3&fields2=f52,f54,f56"
 	body, err := common.NewGetRequest(url).Do()
 	if err != nil {
 		log.Println(err)
 	}
-	str := json.Get(body, "data", "s2n").ToString()
-	// json解析
-	var temp []string
-	_ = json.Unmarshal([]byte(str), &temp)
-	fmt.Println(temp)
+	var str []string
+	json.Get(body, "data", "s2n").ToVal(&str)
+
+	//转dataframe
+	df := dataframe.ReadCSV(strings.NewReader("hgt,sgt,all\n" + strings.Join(str, "\n")))
+	return df.Maps()
 }

@@ -107,10 +107,16 @@ func GetMarket(c *gin.Context) {
 
 func GetTicks(c *gin.Context) {
 	code := c.Query("code")
-	data := GetRealtimeTicks(code)
-	c.JSON(200, gin.H{
-		"status": true, "data": data,
-	})
+	data, err := GetRealtimeTicks(code)
+	if err != nil {
+		c.JSON(200, gin.H{
+			"status": false, "msg": err.Error(),
+		})
+	} else {
+		c.JSON(200, gin.H{
+			"status": true, "data": data,
+		})
+	}
 }
 
 func GetPanKou(c *gin.Context) {
