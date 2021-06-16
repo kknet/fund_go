@@ -9,9 +9,7 @@ import (
 	"github.com/go-gota/gota/series"
 	jsoniter "github.com/json-iterator/go"
 	"go.mongodb.org/mongo-driver/bson"
-	"go.mongodb.org/mongo-driver/mongo"
 	"log"
-	"math"
 	"strconv"
 	"strings"
 )
@@ -29,21 +27,23 @@ var coll = download.ConnectMongo("AllStock")
 
 // GetStockList 获取多只股票信息
 func GetStockList(codes []string) []map[string]interface{} {
-	if len(codes) >= 50 {
-		return nil
-	}
-	data := make([]map[string]interface{}, 0)
 
+	data := download.AllStock["CN"].Filter(dataframe.F{Colname: "code", Comparator: series.In, Comparando: codes}).Maps()
+	data = append(data, download.AllStock["CNIndex"].Filter(dataframe.F{Colname: "code", Comparator: series.In, Comparando: codes}).Maps()...)
+	data = append(data, download.AllStock["HK"].Filter(dataframe.F{Colname: "code", Comparator: series.In, Comparando: codes}).Maps()...)
+	data = append(data, download.AllStock["US"].Filter(dataframe.F{Colname: "code", Comparator: series.In, Comparando: codes}).Maps()...)
+
+	// 排序整理
+	var results []map[string]interface{}
 	for _, c := range codes {
-		for _, df := range download.AllStock {
-			item := df.Filter(dataframe.F{Colname: "code", Comparator: series.Eq, Comparando: c}).Maps()
-			if len(item) > 0 {
-				data = append(data, item[0])
+		for _, item := range data {
+			if item["code"].(string) == c {
+				results = append(results, item)
 				break
 			}
 		}
 	}
-	return data
+	return results
 }
 
 // AddSimpleMinute 添加简略分时行情
@@ -89,7 +89,7 @@ func search(input string) []map[string]interface{} {
 
 			if strings.Contains(str, input) {
 				if i >= 1 {
-					results = append(results, df.Subset(i - 1).Maps()[0])
+					results = append(results, df.Subset(i-1).Maps()...)
 					if len(results) > 12 {
 						return results
 					}
@@ -107,12 +107,10 @@ func getRank(opt *common.RankOpt) []map[string]interface{} {
 	for i := 0; i < pageSize; i++ {
 		indexes[i] = (opt.Page-1)*pageSize + i
 	}
-
 	order := dataframe.RevSort(opt.SortName)
 	if opt.Sorted == true {
 		order = dataframe.Sort(opt.SortName)
 	}
-
 	data := download.AllStock[opt.MarketType].Arrange(order).Subset(indexes)
 
 	return data.Maps()
@@ -153,9 +151,9 @@ func GetRealtimeTicks(code string) (interface{}, error) {
 
 	df := dataframe.ReadJSON(strings.NewReader(str)).
 		Select([]string{"current", "percent", "side", "timestamp", "trade_volume", "trade_unique_id"}).
-		Rename("price", "current").Rename("type", "side").
-		Rename("vol", "trade_volume").Rename("id", "trade_unique_id")
-
+		RenameDic(map[string]string{
+			"current": "price", "side": "type", "trade_volume": "vol", "trade_unique_id": "id",
+		})
 	return df.Maps(), nil
 }
 
@@ -181,97 +179,53 @@ func formatStock(input string) (string, error) {
 
 // getNumbers 获取涨跌分布
 func getNumbers(marketType string) bson.M {
+	df := download.AllStock[marketType]
 
-	var temp []bson.M
-	_ = coll.Aggregate(ctx, mongo.Pipeline{
-		bson.D{{"$match", bson.M{"marketType": marketType, "type": "stock"}}},
-		bson.D{{"$group", bson.M{
-			"_id":     nil,
-			"pct_chg": bson.M{"$push": "$pct_chg"},
-			"wb":      bson.M{"$push": "$wb"},
-		}}},
-	}).All(&temp)
+	label := []string{"<10", "<7", "7-5", "5-3", "3-0", "0", "0-3", "3-5", "5-7", ">7", ">10"}
+	value := []int{
+		df.Filter(dataframe.F{Colname: "pct_chg", Comparator: series.Less, Comparando: -10}).Nrow(),
 
-	res := make([]int32, 11)
-	pct := temp[0]["pct_chg"].(bson.A)
-	wb := temp[0]["wb"].(bson.A)
+		df.Filter(dataframe.F{Colname: "pct_chg", Comparator: series.GreaterEq, Comparando: -20}).
+			Filter(dataframe.F{Colname: "pct_chg", Comparator: series.Less, Comparando: -7}).Nrow(),
 
-	for i := range temp {
-		p := pct[i].(float64) //涨跌幅pct_chg
-		w := wb[i].(float64)
+		df.Filter(dataframe.F{Colname: "pct_chg", Comparator: series.Less, Comparando: -5}).
+			Filter(dataframe.F{Colname: "pct_chg", Comparator: series.GreaterEq, Comparando: -7}).Nrow(),
 
-		if p < -7 {
-			res[1]++
-		} else if p < -5 {
-			res[2]++
-		} else if p < -3 {
-			res[3]++
-		} else if p < 0 {
-			res[4]++
-		} else if p == 0 {
-			res[5]++
-		} else if p <= 3 {
-			res[6]++
-		} else if p <= 5 {
-			res[7]++
-		} else if p <= 7 {
-			res[8]++
-		} else if p > 7 {
-			res[9]++
-		}
+		df.Filter(dataframe.F{Colname: "pct_chg", Comparator: series.Less, Comparando: -3}).
+			Filter(dataframe.F{Colname: "pct_chg", Comparator: series.GreaterEq, Comparando: -5}).Nrow(),
 
-		if marketType != "CN" {
-			if p < -10 {
-				res[0]++
-			} else if p > 10 {
-				res[10]++
-			}
-		} else {
-			if w == -100 {
-				res[0]++
-			} else if w == 100 {
-				res[10]++
-			}
-		}
+		df.Filter(dataframe.F{Colname: "pct_chg", Comparator: series.Less, Comparando: 0}).
+			Filter(dataframe.F{Colname: "pct_chg", Comparator: series.GreaterEq, Comparando: -3}).Nrow(),
+
+		df.Filter(dataframe.F{Colname: "pct_chg", Comparator: series.Eq, Comparando: 0}).Nrow(),
+
+		df.Filter(dataframe.F{Colname: "pct_chg", Comparator: series.Greater, Comparando: 0}).
+			Filter(dataframe.F{Colname: "pct_chg", Comparator: series.LessEq, Comparando: 3}).Nrow(),
+
+		df.Filter(dataframe.F{Colname: "pct_chg", Comparator: series.Greater, Comparando: 3}).
+			Filter(dataframe.F{Colname: "pct_chg", Comparator: series.LessEq, Comparando: 5}).Nrow(),
+
+		df.Filter(dataframe.F{Colname: "pct_chg", Comparator: series.Greater, Comparando: 5}).
+			Filter(dataframe.F{Colname: "pct_chg", Comparator: series.LessEq, Comparando: 7}).Nrow(),
+
+		df.Filter(dataframe.F{Colname: "pct_chg", Comparator: series.Greater, Comparando: 7}).Nrow(),
+
+		df.Filter(dataframe.F{Colname: "pct_chg", Comparator: series.Eq, Comparando: 10}).Nrow(),
 	}
-	label := []string{"跌停", "<7", "7-5", "5-3", "3-0", "0", "0-3", "3-5", "5-7", ">7", "涨停"}
-	if marketType != "CN" {
-		label[0] = "<10"
-		label[10] = ">10"
+
+	if marketType == "CN" {
+		label[0] = "跌停"
+		value[0] = df.Filter(dataframe.F{Colname: "wb", Comparator: series.Eq, Comparando: -100}).Nrow()
+		label[10] = "涨停"
+		value[10] = df.Filter(dataframe.F{Colname: "wb", Comparator: series.Eq, Comparando: 100}).Nrow()
 	}
-	return bson.M{"label": label, "value": res}
+	return bson.M{"label": label, "value": value}
 }
 
 // getIndustry 获取板块行情
 // marketType=CN; name=sw, industry, area
 func getIndustry(name string) []bson.M {
 	var results []bson.M
-	_ = coll.Aggregate(ctx, mongo.Pipeline{
-		bson.D{{"$match", bson.M{"marketType": "CN", "type": "stock", name: bson.M{"$nin": bson.A{math.NaN(), nil, ""}}}}},
-		bson.D{{"$sort", bson.M{"pct_chg": -1}}},
-		bson.D{{"$group", bson.M{
-			"_id":         "$" + name,
-			"max_pct":     bson.M{"$first": "$pct_chg"},
-			"count":       bson.M{"$sum": 1},
-			"领涨股":         bson.M{"$first": "$name"},
-			"主力净流入":       bson.M{"$sum": "$main_net"},
-			"mc":          bson.M{"$sum": "$mc"},
-			"pe_ttm":      bson.M{"$avg": "$pe_ttm"},
-			"pb":          bson.M{"$avg": "$pb"},
-			"vol":         bson.M{"$sum": "$vol"},
-			"amount":      bson.M{"$sum": "$amount"},
-			"total_share": bson.M{"$sum": "$total_share"},
-			"power":       bson.M{"$sum": bson.M{"$multiply": bson.A{"$mc", "$pct_chg"}}},
-		}}},
-	}).All(&results)
-	// 由权重计算涨跌幅
-	for _, i := range results {
-		i["pct_chg"] = i["power"].(float64) / i["mc"].(float64)
-		// 换手率
-		i["tr"] = i["vol"].(float64) / i["total_share"].(float64) * 10000
-		delete(i, "power")
-		delete(i, "total_share")
-	}
 	return results
 }
 

@@ -24,8 +24,6 @@ var AllStock = map[string]dataframe.DataFrame{}
 
 // 计算指标
 func calData(df dataframe.DataFrame, marketType string) dataframe.DataFrame {
-	length := df.Nrow()
-
 	//删除所有值为 "0" 的列
 	for _, col := range df.Names() {
 		s := df.Col(col)
@@ -51,8 +49,8 @@ func calData(df dataframe.DataFrame, marketType string) dataframe.DataFrame {
 	}).Col("code")
 	df = df.Mutate(code)
 
-	df = df.Mutate(newSeries(Expression(marketType == "CNIndex", "CN", marketType), "marketType", length))
-	df = df.Mutate(newSeries(Expression(marketType == "CNIndex", "index", "stock"), "type", length))
+	df = df.SetCol("marketType", Expression(marketType == "CNIndex", "CN", marketType))
+	df = df.SetCol("type", Expression(marketType == "CNIndex", "index", "stock"))
 
 	// 计算涨跌幅
 	pct := df.Select([]string{"price", "close"}).Rapply(func(s series.Series) series.Series {
@@ -62,12 +60,6 @@ func calData(df dataframe.DataFrame, marketType string) dataframe.DataFrame {
 	}).Rename("pct_chg", "X0").Col("pct_chg")
 	df = df.Mutate(pct)
 
-	// 去除涨跌幅为空的数据
-	for i := 0; i < pct.Len(); i++ {
-		if pct.Elem(i).IsNA() {
-			df = df.Drop(i)
-		}
-	}
 	// 计算换手率 市值 资金净流入
 	if marketType != "CNIndex" {
 		data := df.Select([]string{"total_share", "float_share", "price", "vol", "内盘", "外盘"}).Rapply(func(s series.Series) series.Series {
@@ -76,10 +68,9 @@ func calData(df dataframe.DataFrame, marketType string) dataframe.DataFrame {
 			tr := s.Elem(3).Float() / s.Elem(0).Float() * 10000
 			net := (s.Elem(5).Float() - s.Elem(4).Float()) * s.Elem(2).Float()
 
-			s.Set([]int{0, 1, 2, 3}, series.Floats([]float64{mc, fmc, tr, net}))
-			return s
+			return series.Floats([]float64{mc, fmc, tr, net})
 		}).Rename("mc", "X0").Rename("fmc", "X1").
-			Rename("tr", "X2").Rename("net", "X3").Drop([]string{"X4", "X5"})
+			Rename("tr", "X2").Rename("net", "X3")
 		df = df.CBind(data)
 	}
 	//主力资金流向
@@ -90,8 +81,7 @@ func calData(df dataframe.DataFrame, marketType string) dataframe.DataFrame {
 			in := (net + amount) / 2.0
 			out := net - in
 
-			s.Set([]int{0, 1, 2}, series.Floats([]float64{net, in, out}))
-			return s
+			return series.Floats([]float64{net, in, out})
 		}).Rename("main_net", "X0").Rename("main_in", "X1").Rename("main_out", "X2")
 		df = df.CBind(data)
 	}
@@ -106,8 +96,8 @@ func getEastMoney(marketType string) {
 		"HK":      "m:116+t:1,m:116+t:2,m:116+t:3,m:116+t:4",
 		"US":      "m:105,m:106,m:107",
 	}
-	url := URL + "po=1&fid=f6&pz=8000&np=1&fltt=2&pn=1&fs=" + fs[marketType] + "&fields="
-	// 重命名map
+	url := URL + "po=1&fid=f6&pz=7500&np=1&fltt=2&pn=1&fs=" + fs[marketType] + "&fields="
+	// 重命名
 	rename := map[string]string{
 		"f2": "price", "f5": "vol", "f6": "amount", "f7": "amp", "f15": "high", "f16": "low",
 		"f17": "open", "f12": "code", "f10": "vr", "f13": "cid", "f14": "name", "f18": "close",
@@ -129,7 +119,6 @@ func getEastMoney(marketType string) {
 	for i := range rename {
 		url += i + ","
 	}
-	//去掉末尾的逗号
 	url = url[:len(url)-1]
 
 	request := common.NewGetRequest(url)
@@ -139,15 +128,12 @@ func getEastMoney(marketType string) {
 			log.Println("下载股票数据发生错误，", err.Error())
 		}
 		str := json.Get(body, "data", "diff").ToString()
-		//初始化
+
 		df := dataframe.ReadJSON(strings.NewReader(str), dataframe.WithTypes(map[string]series.Type{
 			"f12": series.String, "f13": series.String,
 		}))
-		//改名
-		for key, value := range rename {
-			df = df.Rename(value, key)
-		}
-		//计算
+
+		df = df.RenameDic(rename)
 		AllStock[marketType] = calData(df, marketType)
 
 		for !common.IsOpen(marketType) {
@@ -157,7 +143,7 @@ func getEastMoney(marketType string) {
 	}
 }
 
-// GoDownload 主下载函数
+// GoDownload 下载函数
 func GoDownload() {
 	go getEastMoney("CN")
 	go getEastMoney("CNIndex")
