@@ -6,8 +6,7 @@ import (
 	"go.mongodb.org/mongo-driver/bson"
 )
 
-var realColl = ConnectMongo("AllStock")
-var finaColl = ConnectMongo("Fina")
+var coll = ConnectMongo("AllStock")
 
 var ctx = context.Background()
 
@@ -26,7 +25,7 @@ func writeToMongo(stock []bson.M) {
 	err = insertToMongo(stock)
 
 	for _, item := range stock {
-		err = realColl.UpdateId(ctx, item["code"], bson.M{"$set": item})
+		err = coll.UpdateId(ctx, item["code"], bson.M{"$set": item})
 		if err != nil {
 			//log.Println(err)
 		}
@@ -37,7 +36,7 @@ func writeToMongo(stock []bson.M) {
 func insertToMongo(stock []bson.M) error {
 	for _, item := range stock {
 		item["_id"] = item["code"]
-		_, err := realColl.InsertOne(ctx, item)
+		_, err := coll.InsertOne(ctx, item)
 		if err != nil {
 			return err
 		}

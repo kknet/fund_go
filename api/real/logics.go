@@ -1,7 +1,6 @@
 package real
 
 import (
-	"context"
 	"errors"
 	"fund_go2/common"
 	"fund_go2/download"
@@ -14,16 +13,8 @@ import (
 	"strings"
 )
 
-const (
-	pageSize = 20
-)
-
 // jsoniter
 var json = jsoniter.ConfigCompatibleWithStandardLibrary
-var ctx = context.Background()
-
-// mongo collection
-var coll = download.ConnectMongo("AllStock")
 
 // GetStockList 获取多只股票信息
 func GetStockList(codes []string) []map[string]interface{} {
@@ -48,14 +39,12 @@ func GetStockList(codes []string) []map[string]interface{} {
 
 // AddSimpleMinute 添加简略分时行情
 func AddSimpleMinute(items map[string]interface{}) {
+
 	var info []string
 	url := "https://push2.eastmoney.com/api/qt/stock/trends2/get?fields1=f1,f5,f8,f10,f11&fields2=f53&iscr=0&secid="
-	url += items["cid"].(string) + "." + strings.Split(items["code"].(string), ".")[0]
 
-	body, _ := common.NewGetRequest(url).Do()
+	body, _ := common.NewGetRequest(url + items["cid"].(string)).Do()
 	total := json.Get(body, "data", "trendsTotal").ToFloat32()
-	timestamp := json.Get(body, "data", "time").ToInt()
-
 	json.Get(body, "data", "trends").ToVal(&info)
 
 	// 间隔
@@ -70,7 +59,32 @@ func AddSimpleMinute(items map[string]interface{}) {
 	results = append(results, items["price"].(float64))
 
 	items["chart"] = bson.M{
-		"trends": results, "total": total, "timestamp": timestamp, "space": space,
+		"trends": results, "total": total, "space": space,
+	}
+}
+
+// Add60Day 添加60日行情
+func Add60Day(items map[string]interface{}) {
+
+}
+
+// GetMinuteData 获取分时行情
+func GetMinuteData(code string) interface{} {
+	cid := GetStockList([]string{code})
+	if len(cid) == 0 {
+		return errors.New("改代码不存在")
+	}
+	url := "https://push2.eastmoney.com/api/qt/stock/trends2/get?fields1=f1&fields2=f51,f53,f56,f57,f58&iscr=0&secid="
+	body, _ := common.NewGetRequest(url + cid[0]["cid"].(string)).Do()
+
+	var info []string
+	json.Get(body, "data", "trends").ToVal(&info)
+	df := dataframe.ReadCSV(strings.NewReader("time,price,vol,amount,avg\n" + strings.Join(info, "\n")))
+
+	return map[string]interface{}{
+		"time":  df.Col("time").String(),
+		"price": df.Col("price").Float(), "vol": df.Col("vol").Float(),
+		"amount": df.Col("amount").Float(), "avg": df.Col("avg").Float(),
 	}
 }
 
@@ -102,10 +116,10 @@ func search(input string) []map[string]interface{} {
 
 // getRank 全市场排行
 func getRank(opt *common.RankOpt) []map[string]interface{} {
-	indexes := make([]int, pageSize)
+	indexes := make([]int, 20)
 
-	for i := 0; i < pageSize; i++ {
-		indexes[i] = (opt.Page-1)*pageSize + i
+	for i := 0; i < 20; i++ {
+		indexes[i] = (opt.Page-1)*20 + i
 	}
 	order := dataframe.RevSort(opt.SortName)
 	if opt.Sorted == true {
@@ -124,7 +138,7 @@ func PanKou(code string) bson.M {
 		return bson.M{"msg": "代码格式错误"}
 	}
 	url := "https://stock.xueqiu.com/v5/stock/realtime/pankou.json?&symbol=" + code
-	body, err := common.NewGetRequest(url, true).Do()
+	body, err := common.NewGetRequest(url).Do()
 	if err != nil {
 		panic(err)
 	}
@@ -137,44 +151,50 @@ func PanKou(code string) bson.M {
 
 // GetRealtimeTicks 获取最近分笔成交
 func GetRealtimeTicks(code string) (interface{}, error) {
-	// 格式化代码为雪球格式
-	code, err := formatStock(code)
-	if err != nil {
-		return nil, errors.New("代码格式错误")
+	cid := GetStockList([]string{code})
+	if len(cid) == 0 {
+		return nil, errors.New("改代码不存在")
 	}
-	url := "https://stock.xueqiu.com/v5/stock/history/trade.json?&count=50&symbol=" + code
-	body, err := common.NewGetRequest(url, true).Do()
-	if err != nil {
-		return nil, errors.New("请求错误")
-	}
-	str := json.Get(body, "data", "items").ToString()
 
-	df := dataframe.ReadJSON(strings.NewReader(str)).
-		Select([]string{"current", "percent", "side", "timestamp", "trade_volume", "trade_unique_id"}).
-		RenameDic(map[string]string{
-			"current": "price", "side": "type", "trade_volume": "vol", "trade_unique_id": "id",
-		})
+	url := "https://push2.eastmoney.com/api/qt/stock/details/get?fields1=f1&fields2=f51,f52,f53,f55&pos=-60&secid="
+	body, err := common.NewGetRequest(url + cid[0]["cid"].(string)).Do()
+	if err != nil {
+		return nil, errors.New("请求发生错误")
+	}
+	var info []string
+	json.Get(body, "data", "details").ToVal(&info)
+
+	df := dataframe.ReadCSV(strings.NewReader("time,price,vol,type\n" + strings.Join(info, "\n")))
+
+	// 更改type
+	side := df.Col("type").Map(func(data series.Element) series.Element {
+		switch data.Float() {
+		case 4:
+			data.Set(0)
+		case 1:
+			data.Set(-1)
+		case 2:
+			data.Set(1)
+		}
+		return data
+	})
+	df = df.Mutate(side)
 	return df.Maps(), nil
 }
 
 // formatStock 股票代码格式化为雪球代码
 func formatStock(input string) (string, error) {
-	item := strings.Split(input, ".")
-	var code string
+	if strings.Contains(input, ".") {
+		item := strings.Split(input, ".")
 
-	if len(item) < 2 {
-		return "", errors.New("代码格式不正确")
+		switch item[1] {
+		case "SH", "SZ":
+			return item[1] + item[0], nil
+		case "HK", "US":
+			return item[0], nil
+		}
 	}
-	// 代码后缀
-	switch item[1] {
-	case "SH", "SZ", "sh", "sz":
-		code = item[1] + item[0]
-	case "HK", "US", "us", "hk":
-		code = item[0]
-	default:
-		return "", errors.New("代码格式不正确")
-	}
-	return code, nil
+	return "", errors.New("代码格式不正确")
 }
 
 // getNumbers 获取涨跌分布

@@ -10,11 +10,11 @@ import (
 
 // GetChart 获取图表数据
 func GetChart(c *gin.Context) {
-	//code := c.Query("code")
+	code := c.Query("code")
 	//data := stock.GetSimpleMinute(code)
-	//data := stock.GetMinuteChart(code)
+	data := GetMinuteData(code)
 	c.JSON(200, gin.H{
-		"status": true, "msg": "该接口暂不可用",
+		"status": true, "data": data,
 	})
 }
 
@@ -43,8 +43,8 @@ func GetRank(c *gin.Context) {
 	opt := &common.RankOpt{}
 
 	//marketType
-	query, status := c.GetQuery("marketType")
-	if !status {
+	query, ok := c.GetQuery("marketType")
+	if !ok {
 		c.JSON(200, gin.H{
 			"status": false, "msg": "必须指定marketType参数",
 		})

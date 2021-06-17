@@ -10,14 +10,7 @@ import (
 	"time"
 )
 
-const (
-	URL = "https://push2.eastmoney.com/api/qt/clist/get?"
-)
-
 var json = jsoniter.ConfigCompatibleWithStandardLibrary
-
-//通道
-var myChan chan bool
 
 // AllStock 存储所有股票数据
 var AllStock = map[string]dataframe.DataFrame{}
@@ -26,65 +19,87 @@ var AllStock = map[string]dataframe.DataFrame{}
 func calData(df dataframe.DataFrame, marketType string) dataframe.DataFrame {
 	//删除所有值为 "0" 的列
 	for _, col := range df.Names() {
-		s := df.Col(col)
-		if s.Max() == 0 {
-			df = df.Drop(s.Name)
+		if df.Col(col).Max() == 0 {
+			df = df.Drop(col)
 		}
 	}
 	//代码格式化
-	code := df.Select("code").Capply(func(s series.Series) series.Series {
-		for i := 0; i < s.Len(); i++ {
-			c := s.Elem(i)
-			str := c.String()
-			switch marketType {
-			case "CN":
-				c.Set(str + Expression(str[0] == '6', ".SH", ".SZ").(string))
-			case "CNIndex":
-				c.Set(str + Expression(str[0] == '0', ".SH", ".SZ").(string))
-			case "HK", "US":
-				c.Set(str + "." + marketType)
-			}
+	basic := df.Select([]string{"cid", "code"}).Rapply(func(s series.Series) series.Series {
+		// cid
+		cid := s.Elem(0).String() + "." + s.Elem(1).String()
+		// code
+		code := s.Elem(1).String()
+		switch marketType {
+		case "CN":
+			code += Expression(code[0] == '6', ".SH", ".SZ").(string)
+		case "CNIndex":
+			code += Expression(code[0] == '0', ".SH", ".SZ").(string)
+		case "HK", "US":
+			code += "." + marketType
 		}
-		return s
-	}).Col("code")
-	df = df.Mutate(code)
+		return series.Strings([]string{cid, code})
+	})
+	_ = basic.SetNames("cid", "code")
+	for _, col := range basic.Names() {
+		df = df.Mutate(basic.Col(col))
+	}
+
+	// 计算指标
+	indexes := []string{"price", "close", "high", "low", "vol", "total_share", "float_share", "内盘", "外盘", "amount"}
+	pct := df.Select(indexes).Rapply(func(s series.Series) series.Series {
+		value := s.Float()
+		// pct_chg
+		pctChg := (value[0]/value[1] - 1.0) * 100
+		// amp
+		amp := (value[2] - value[3]) / value[1] * 100
+		// tr
+		tr := value[4] / value[6] * 10000
+		// mc
+		mc := value[0] * value[5]
+		fmc := value[0] * value[6]
+		// net (均价)
+		net := (value[8] - value[7]) * value[9] / value[4]
+
+		return series.Floats([]float64{pctChg, amp, tr, mc, fmc, net})
+	})
+	_ = pct.SetNames("pct_chg", "amp", "tr", "mc", "fmc", "net")
+	for _, col := range pct.Names() {
+		df = df.Mutate(pct.Col(col))
+	}
+
+	//添加资金流入市场排名
+	dfNet := df.Arrange(dataframe.RevSort("net"))
+	rank := make([]int, df.Nrow())
+	for i := range rank {
+		rank[i] = i + 1
+	}
+	dfNet = dfNet.Mutate(series.New(rank, series.Int, "net_rank")).Select([]string{"code", "net_rank"})
+	df = df.InnerJoin(dfNet, "code")
 
 	df = df.SetCol("marketType", Expression(marketType == "CNIndex", "CN", marketType))
 	df = df.SetCol("type", Expression(marketType == "CNIndex", "index", "stock"))
 
-	// 计算涨跌幅
-	pct := df.Select([]string{"price", "close"}).Rapply(func(s series.Series) series.Series {
-		pctChg := (s.Elem(0).Float()/s.Elem(1).Float() - 1.0) * 100
-		s.Elem(0).Set(pctChg)
-		return s
-	}).Rename("pct_chg", "X0").Col("pct_chg")
-	df = df.Mutate(pct)
-
-	// 计算换手率 市值 资金净流入
-	if marketType != "CNIndex" {
-		data := df.Select([]string{"total_share", "float_share", "price", "vol", "内盘", "外盘"}).Rapply(func(s series.Series) series.Series {
-			mc := s.Elem(0).Float() * s.Elem(2).Float()
-			fmc := s.Elem(1).Float() * s.Elem(2).Float()
-			tr := s.Elem(3).Float() / s.Elem(0).Float() * 10000
-			net := (s.Elem(5).Float() - s.Elem(4).Float()) * s.Elem(2).Float()
-
-			return series.Floats([]float64{mc, fmc, tr, net})
-		}).Rename("mc", "X0").Rename("fmc", "X1").
-			Rename("tr", "X2").Rename("net", "X3")
-		df = df.CBind(data)
-	}
 	//主力资金流向
 	if marketType == "CN" {
 		data := df.Select([]string{"main_huge", "main_big", "main_pct"}).Rapply(func(s series.Series) series.Series {
-			net := s.Elem(0).Float() + s.Elem(1).Float()
-			amount := net / s.Elem(2).Float() * 100
+			value := s.Float()
+			net := value[0] + value[1]
+			amount := net / value[2] * 100
 			in := (net + amount) / 2.0
 			out := net - in
 
 			return series.Floats([]float64{net, in, out})
-		}).Rename("main_net", "X0").Rename("main_in", "X1").Rename("main_out", "X2")
+		})
+		_ = data.SetNames("main_net", "main_in", "main_out")
 		df = df.CBind(data)
+
+		//添加主力资金市场排名
+		dfNet = df.Arrange(dataframe.RevSort("main_net"))
+		dfNet = dfNet.Mutate(series.New(rank, series.Int, "main_net_rank")).Select([]string{"code", "main_net_rank"})
+		df = df.InnerJoin(dfNet, "code")
 	}
+
+	df = df.Drop([]string{"内盘", "外盘"})
 	return df
 }
 
@@ -96,27 +111,28 @@ func getEastMoney(marketType string) {
 		"HK":      "m:116+t:1,m:116+t:2,m:116+t:3,m:116+t:4",
 		"US":      "m:105,m:106,m:107",
 	}
-	url := URL + "po=1&fid=f6&pz=7500&np=1&fltt=2&pn=1&fs=" + fs[marketType] + "&fields="
+	url := "https://push2.eastmoney.com/api/qt/clist/get?po=1&fid=f6&pz=7500&np=1&fltt=2&pn=1&fs=" + fs[marketType] + "&fields="
 	// 重命名
-	rename := map[string]string{
-		"f2": "price", "f5": "vol", "f6": "amount", "f7": "amp", "f15": "high", "f16": "low",
+	name := map[string]string{
+		"f2": "price", "f5": "vol", "f6": "amount", "f15": "high", "f16": "low",
 		"f17": "open", "f12": "code", "f10": "vr", "f13": "cid", "f14": "name", "f18": "close",
 		"f23": "pb", "f34": "外盘", "f35": "内盘",
-		//"f22": "涨速", "f11": "pct5min", "f24": "pct60day", "f25": "pct_current_year",
+		"f22": "pct_rate", "f11": "pct5min", "f24": "pct60day", "f25": "pct_current_year",
 		"f38": "total_share", "f39": "float_share", "f115": "pe_ttm",
 		//"f100": "EMIds",
-		//"f37": "roe", "f40": "营收", "f41": "营收同比", "f45": "净利润", "f46": "净利润同比",
+		"f37": "roe",
+		//"f40": "营收", "f41": "营收同比", "f45": "净利润", "f46": "净利润同比",
 	}
 	if marketType == "CN" {
-		rename["f33"] = "wb"
-		rename["f66"] = "main_huge"
-		rename["f72"] = "main_big"
-		rename["f78"] = "main_mid"
-		rename["f84"] = "main_small"
-		rename["f184"] = "main_pct"
+		name["f33"] = "wb"
+		name["f66"] = "main_huge"
+		name["f72"] = "main_big"
+		name["f78"] = "main_mid"
+		name["f84"] = "main_small"
+		name["f184"] = "main_pct"
 	}
 	//连接参数
-	for i := range rename {
+	for i := range name {
 		url += i + ","
 	}
 	url = url[:len(url)-1]
@@ -131,15 +147,18 @@ func getEastMoney(marketType string) {
 
 		df := dataframe.ReadJSON(strings.NewReader(str), dataframe.WithTypes(map[string]series.Type{
 			"f12": series.String, "f13": series.String,
-		}))
+		})).RenameDic(name)
 
-		df = df.RenameDic(rename)
 		AllStock[marketType] = calData(df, marketType)
 
 		for !common.IsOpen(marketType) {
 			time.Sleep(time.Millisecond * 500)
 		}
-		time.Sleep(time.Millisecond * 300)
+		if marketType == "CNIndex" {
+			time.Sleep(time.Second * 1)
+		}
+		time.Sleep(time.Millisecond * 200)
+		time.Sleep(time.Second * 9999)
 	}
 }
 
