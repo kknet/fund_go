@@ -18,12 +18,10 @@ var json = jsoniter.ConfigCompatibleWithStandardLibrary
 
 // GetStockList 获取多只股票信息
 func GetStockList(codes []string) []map[string]interface{} {
-
-	data := download.AllStock["CN"].Filter(dataframe.F{Colname: "code", Comparator: series.In, Comparando: codes}).Maps()
-	data = append(data, download.AllStock["CNIndex"].Filter(dataframe.F{Colname: "code", Comparator: series.In, Comparando: codes}).Maps()...)
-	data = append(data, download.AllStock["HK"].Filter(dataframe.F{Colname: "code", Comparator: series.In, Comparando: codes}).Maps()...)
-	data = append(data, download.AllStock["US"].Filter(dataframe.F{Colname: "code", Comparator: series.In, Comparando: codes}).Maps()...)
-
+	var data []map[string]interface{}
+	for _, df := range download.AllStock {
+		data = append(data, df.Filter(dataframe.F{Colname: "code", Comparator: series.In, Comparando: codes}).Maps()...)
+	}
 	// 排序整理
 	var results []map[string]interface{}
 	for _, c := range codes {
@@ -64,8 +62,9 @@ func AddSimpleMinute(items map[string]interface{}) {
 }
 
 // Add60Day 添加60日行情
-func Add60Day(items map[string]interface{}) {
-
+func Add60Day(items map[string]interface{}) interface{} {
+	url := "https://push2.eastmoney.com/api/qt/stock/details/get?fields1=f1&fields2=f51,f52,f53,f55&pos=-999999&secid="
+	return url
 }
 
 // GetMinuteData 获取分时行情

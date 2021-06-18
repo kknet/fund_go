@@ -10,6 +10,9 @@ import (
 
 /* 主函数 */
 func main() {
+	// 监听自选表websocket
+	go apiV1.SendCList()
+
 	// 启动后台下载
 	download.GoDownload()
 
@@ -46,7 +49,7 @@ func main() {
 
 	// WebSocket
 	wsStock := ws.Group("/stock")
-	wsStock.GET("/clist", apiV1.CList)
+	wsStock.GET("/clist", apiV1.Connect)
 
 	// 错误处理
 	r.NoRoute(func(context *gin.Context) {

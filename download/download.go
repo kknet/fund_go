@@ -7,6 +7,7 @@ import (
 	jsoniter "github.com/json-iterator/go"
 	"log"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -15,15 +16,22 @@ var json = jsoniter.ConfigCompatibleWithStandardLibrary
 // AllStock 存储所有股票数据
 var AllStock = map[string]dataframe.DataFrame{}
 
+// MyChan 全局通道
+var MyChan = getGlobalChan()
+
+func getGlobalChan() chan bool {
+	var ch chan bool
+	var chanOnceManager sync.Once
+
+	chanOnceManager.Do(func() {
+		ch = make(chan bool)
+	})
+	return ch
+}
+
 // 计算指标
 func calData(df dataframe.DataFrame, marketType string) dataframe.DataFrame {
-	//删除所有值为 "0" 的列
-	for _, col := range df.Names() {
-		if df.Col(col).Max() == 0 {
-			df = df.Drop(col)
-		}
-	}
-	//代码格式化
+	//基本信息
 	basic := df.Select([]string{"cid", "code"}).Rapply(func(s series.Series) series.Series {
 		// cid
 		cid := s.Elem(0).String() + "." + s.Elem(1).String()
@@ -40,6 +48,7 @@ func calData(df dataframe.DataFrame, marketType string) dataframe.DataFrame {
 		return series.Strings([]string{cid, code})
 	})
 	_ = basic.SetNames("cid", "code")
+
 	for _, col := range basic.Names() {
 		df = df.Mutate(basic.Col(col))
 	}
@@ -48,33 +57,21 @@ func calData(df dataframe.DataFrame, marketType string) dataframe.DataFrame {
 	indexes := []string{"price", "close", "high", "low", "vol", "total_share", "float_share", "内盘", "外盘", "amount"}
 	pct := df.Select(indexes).Rapply(func(s series.Series) series.Series {
 		value := s.Float()
-		// pct_chg
+
 		pctChg := (value[0]/value[1] - 1.0) * 100
-		// amp
 		amp := (value[2] - value[3]) / value[1] * 100
-		// tr
 		tr := value[4] / value[6] * 10000
-		// mc
 		mc := value[0] * value[5]
 		fmc := value[0] * value[6]
-		// net (均价)
-		net := (value[8] - value[7]) * value[9] / value[4]
+		net := (value[8] - value[7]) * value[9] / value[4] // 均价
 
 		return series.Floats([]float64{pctChg, amp, tr, mc, fmc, net})
 	})
 	_ = pct.SetNames("pct_chg", "amp", "tr", "mc", "fmc", "net")
+
 	for _, col := range pct.Names() {
 		df = df.Mutate(pct.Col(col))
 	}
-
-	//添加资金流入市场排名
-	dfNet := df.Arrange(dataframe.RevSort("net"))
-	rank := make([]int, df.Nrow())
-	for i := range rank {
-		rank[i] = i + 1
-	}
-	dfNet = dfNet.Mutate(series.New(rank, series.Int, "net_rank")).Select([]string{"code", "net_rank"})
-	df = df.InnerJoin(dfNet, "code")
 
 	df = df.SetCol("marketType", Expression(marketType == "CNIndex", "CN", marketType))
 	df = df.SetCol("type", Expression(marketType == "CNIndex", "index", "stock"))
@@ -92,13 +89,7 @@ func calData(df dataframe.DataFrame, marketType string) dataframe.DataFrame {
 		})
 		_ = data.SetNames("main_net", "main_in", "main_out")
 		df = df.CBind(data)
-
-		//添加主力资金市场排名
-		dfNet = df.Arrange(dataframe.RevSort("main_net"))
-		dfNet = dfNet.Mutate(series.New(rank, series.Int, "main_net_rank")).Select([]string{"code", "main_net_rank"})
-		df = df.InnerJoin(dfNet, "code")
 	}
-
 	df = df.Drop([]string{"内盘", "外盘"})
 	return df
 }
@@ -111,7 +102,7 @@ func getEastMoney(marketType string) {
 		"HK":      "m:116+t:1,m:116+t:2,m:116+t:3,m:116+t:4",
 		"US":      "m:105,m:106,m:107",
 	}
-	url := "https://push2.eastmoney.com/api/qt/clist/get?po=1&fid=f6&pz=7500&np=1&fltt=2&pn=1&fs=" + fs[marketType] + "&fields="
+	url := "https://push2.eastmoney.com/api/qt/clist/get?po=1&fid=f6&invt=2&pz=7500&np=1&fltt=2&pn=1&fs=" + fs[marketType] + "&fields="
 	// 重命名
 	name := map[string]string{
 		"f2": "price", "f5": "vol", "f6": "amount", "f15": "high", "f16": "low",
@@ -144,12 +135,15 @@ func getEastMoney(marketType string) {
 			log.Println("下载股票数据发生错误，", err.Error())
 		}
 		str := json.Get(body, "data", "diff").ToString()
+		str = strings.Replace(str, "\"-\"", "null", -1)
 
 		df := dataframe.ReadJSON(strings.NewReader(str), dataframe.WithTypes(map[string]series.Type{
 			"f12": series.String, "f13": series.String,
 		})).RenameDic(name)
 
 		AllStock[marketType] = calData(df, marketType)
+
+		MyChan <- true
 
 		for !common.IsOpen(marketType) {
 			time.Sleep(time.Millisecond * 500)
@@ -158,7 +152,6 @@ func getEastMoney(marketType string) {
 			time.Sleep(time.Second * 1)
 		}
 		time.Sleep(time.Millisecond * 200)
-		time.Sleep(time.Second * 9999)
 	}
 }
 

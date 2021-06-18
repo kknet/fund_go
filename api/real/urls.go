@@ -126,3 +126,17 @@ func GetPanKou(c *gin.Context) {
 		"status": true, "data": data,
 	})
 }
+
+// FilterStock 指标选股
+func FilterStock(c *gin.Context) {
+	marketType, ok := c.Get("marketType")
+	if !ok {
+		c.JSON(200, gin.H{
+			"status": false, "msg": "请指定marketType参数",
+		})
+		return
+	}
+	c.JSON(200, gin.H{
+		"status": true, "msg": marketType,
+	})
+}
