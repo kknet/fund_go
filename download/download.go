@@ -19,12 +19,13 @@ var AllStock = map[string]dataframe.DataFrame{}
 // MyChan 全局通道
 var MyChan = getGlobalChan()
 
-func getGlobalChan() chan bool {
-	var ch chan bool
+// 将MyChan设置为全局通道
+func getGlobalChan() chan interface{} {
+	var ch chan interface{}
 	var chanOnceManager sync.Once
 
 	chanOnceManager.Do(func() {
-		ch = make(chan bool)
+		ch = make(chan interface{})
 	})
 	return ch
 }
@@ -58,14 +59,14 @@ func calData(df dataframe.DataFrame, marketType string) dataframe.DataFrame {
 	pct := df.Select(indexes).Rapply(func(s series.Series) series.Series {
 		value := s.Float()
 
-		pctChg := (value[0]/value[1] - 1.0) * 100
-		amp := (value[2] - value[3]) / value[1] * 100
-		tr := value[4] / value[6] * 10000
-		mc := value[0] * value[5]
-		fmc := value[0] * value[6]
-		net := (value[8] - value[7]) * value[9] / value[4] // 均价
-
-		return series.Floats([]float64{pctChg, amp, tr, mc, fmc, net})
+		return series.Floats([]float64{
+			(value[0]/value[1] - 1.0) * 100,             // pct_chg
+			(value[2] - value[3]) / value[1] * 100,      // amp
+			value[4] / value[6] * 10000,                 // tr
+			value[0] * value[5],                         // mc
+			value[0] * value[6],                         // fmc
+			(value[8] - value[7]) * value[9] / value[4], // 均价
+		})
 	})
 	_ = pct.SetNames("pct_chg", "amp", "tr", "mc", "fmc", "net")
 
