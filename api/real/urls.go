@@ -97,9 +97,9 @@ func GetMarket(c *gin.Context) {
 		c.JSON(200, gin.H{
 			"status": true, "data": bson.M{
 				"numbers":  getNumbers(marketType),
-				"industry": download.CalIndustry("industry"),
-				"sw":       download.CalIndustry("sw"),
-				"area":     download.CalIndustry("area"),
+				"industry": download.Industry["industry"].Maps(),
+				"sw":       download.Industry["sw"].Maps(),
+				"area":     download.Industry["area"].Maps(),
 			},
 		})
 	} else {

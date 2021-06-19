@@ -27,6 +27,7 @@ func GetStockList(codes []string) []map[string]interface{} {
 	for _, c := range codes {
 		for _, item := range data {
 			if item["code"].(string) == c {
+				// 添加行业数据
 				results = append(results, item)
 				break
 			}
@@ -239,12 +240,6 @@ func getNumbers(marketType string) bson.M {
 		value[10] = df.Filter(dataframe.F{Colname: "wb", Comparator: series.Eq, Comparando: 100}).Nrow()
 	}
 	return bson.M{"label": label, "value": value}
-}
-
-// getIndustry 获取板块行情
-// marketType=CN; name=sw, industry, area
-func getIndustry() interface{} {
-	return true
 }
 
 // GetNorthFlow 北向资金流向

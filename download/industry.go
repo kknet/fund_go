@@ -3,6 +3,7 @@ package download
 import (
 	"context"
 	"github.com/go-gota/gota/dataframe"
+	"github.com/go-gota/gota/series"
 	_ "github.com/lib/pq"
 	"github.com/qiniu/qmgo"
 	"go.mongodb.org/mongo-driver/bson"
@@ -44,37 +45,58 @@ func Update() {
 	df = df.InnerJoin(AllStock["CN"].Select(indexes), "code")
 
 	for _, item := range df.Maps() {
-		_, err := coll.UpsertId(ctx, item["code"], item)
+		err := coll.UpdateId(ctx, item["code"], bson.M{"$set": item})
 		if err != nil {
 			log.Println("mongo upsert error: ", err)
 		}
 	}
 }
 
-func CalIndustry(idsName string) []bson.M {
-	var results []bson.M
-	_ = coll.Aggregate(ctx, mongo.Pipeline{
-		bson.D{{"$sort", bson.M{"pct_chg": -1}}},
-		bson.D{{"$group", bson.M{
-			"_id":         "$" + idsName,
-			"max_pct":     bson.M{"$first": "$pct_chg"},
-			"领涨股":         bson.M{"$first": "$name"},
-			"main_net":    bson.M{"$sum": "$main_net"},
-			"net":         bson.M{"$sum": "$net"},
-			"vol":         bson.M{"$sum": "$vol"},
-			"amount":      bson.M{"$sum": "$amount"},
-			"float_share": bson.M{"$sum": "$float_share"},
-			"mc":          bson.M{"$sum": "$mc"},
-			"power":       bson.M{"$sum": bson.M{"$multiply": bson.A{"$mc", "$pct_chg"}}},
-		}}},
-	}).All(&results)
+func CalIndustry() {
+	for _, idsName := range []string{"sw", "industry", "area"} {
+		var results []map[string]interface{}
+		err := coll.Aggregate(ctx, mongo.Pipeline{
+			// 去掉停牌
+			bson.D{{"$match", bson.M{idsName: bson.M{"$ne": "NaN"}, "vol": bson.M{"$gt": 0}}}},
+			bson.D{{"$sort", bson.M{"pct_chg": -1}}},
+			bson.D{{"$group", bson.M{
+				"_id":         "$" + idsName,
+				"max_pct":     bson.M{"$first": "$pct_chg"},
+				"min_pct":     bson.M{"$last": "$pct_chg"},
+				"领涨股":         bson.M{"$first": "$name"},
+				"领跌股":         bson.M{"$last": "$name"},
+				"count":       bson.M{"$sum": 1},
+				"main_net":    bson.M{"$sum": "$main_net"},
+				"net":         bson.M{"$sum": "$net"},
+				"vol":         bson.M{"$sum": "$vol"},
+				"amount":      bson.M{"$sum": "$amount"},
+				"float_share": bson.M{"$sum": "$float_share"},
+				"mc":          bson.M{"$sum": "$mc"},
+				"power":       bson.M{"$sum": bson.M{"$multiply": bson.A{"$mc", "$pct_chg"}}},
+			}}},
+		}).All(&results)
 
-	for _, i := range results {
-		i["tr"] = i["vol"].(float64) / i["float_share"].(float64) * 10000
-		i["pct_chg"] = i["power"].(float64) / i["mc"].(float64)
+		if err != nil {
+			log.Println(err)
+		}
+		df := dataframe.LoadMaps(results).Rename("name", "_id")
 
-		delete(i, "power")
-		delete(i, "float_share")
+		// 计算指标
+		indexes := []string{"vol", "float_share", "power", "mc"}
+		pct := df.Select(indexes).Rapply(func(s series.Series) series.Series {
+			value := s.Float()
+			return series.Floats([]float64{
+				value[0] / value[1] * 10000, // tr
+				value[2] / value[3],         // pct_chg
+			})
+		})
+		_ = pct.SetNames("tr", "pct_chg")
+
+		for _, col := range pct.Names() {
+			df = df.Mutate(pct.Col(col))
+		}
+		df = df.Drop([]string{"power", "float_share"})
+
+		Industry[idsName] = df
 	}
-	return results
 }
