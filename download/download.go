@@ -143,7 +143,6 @@ func getEastMoney(marketType string) {
 		})).RenameDic(name)
 
 		AllStock[marketType] = calData(df, marketType)
-
 		MyChan <- true
 
 		for !common.IsOpen(marketType) {

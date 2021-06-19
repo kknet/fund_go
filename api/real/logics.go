@@ -155,7 +155,7 @@ func GetRealtimeTicks(code string) (interface{}, error) {
 		return nil, errors.New("改代码不存在")
 	}
 
-	url := "https://push2.eastmoney.com/api/qt/stock/details/get?fields1=f1&fields2=f51,f52,f53,f55&pos=-60&secid="
+	url := "https://push2.eastmoney.com/api/qt/stock/details/get?fields1=f1&fields2=f51,f52,f53,f55&pos=-50&secid="
 	body, err := common.NewGetRequest(url + cid[0]["cid"].(string)).Do()
 	if err != nil {
 		return nil, errors.New("请求发生错误")
@@ -243,9 +243,8 @@ func getNumbers(marketType string) bson.M {
 
 // getIndustry 获取板块行情
 // marketType=CN; name=sw, industry, area
-func getIndustry(name string) []bson.M {
-	var results []bson.M
-	return results
+func getIndustry() interface{} {
+	return true
 }
 
 // GetNorthFlow 北向资金流向

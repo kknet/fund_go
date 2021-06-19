@@ -1,10 +1,12 @@
 package common
 
 import (
+	_ "github.com/lib/pq"
 	"time"
 )
 
-func IsOpen(marketType string) bool { //判断是否开市
+// IsOpen 判断是否开市
+func IsOpen(marketType string) bool {
 	// CN
 	if marketType == "CN" || marketType == "CNIndex" {
 		if time.Now().Weekday() <= 5 {

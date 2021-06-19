@@ -2,6 +2,7 @@ package real
 
 import (
 	"fund_go2/common"
+	"fund_go2/download"
 	"github.com/gin-gonic/gin"
 	"go.mongodb.org/mongo-driver/bson"
 	"strconv"
@@ -85,14 +86,20 @@ func Search(c *gin.Context) {
 
 // GetMarket 市场页面聚合接口
 func GetMarket(c *gin.Context) {
-	marketType := c.Query("marketType")
+	marketType, ok := c.GetQuery("marketType")
+	if !ok {
+		c.JSON(200, gin.H{
+			"status": false, "msg": "必须指定marketType参数",
+		})
+		return
+	}
 	if marketType == "CN" {
 		c.JSON(200, gin.H{
 			"status": true, "data": bson.M{
 				"numbers":  getNumbers(marketType),
-				"industry": getIndustry("industry"),
-				"sw":       getIndustry("sw"),
-				"area":     getIndustry("area"),
+				"industry": download.CalIndustry("industry"),
+				"sw":       download.CalIndustry("sw"),
+				"area":     download.CalIndustry("area"),
 			},
 		})
 	} else {
@@ -124,19 +131,5 @@ func GetPanKou(c *gin.Context) {
 	data := PanKou(code)
 	c.JSON(200, gin.H{
 		"status": true, "data": data,
-	})
-}
-
-// FilterStock 指标选股
-func FilterStock(c *gin.Context) {
-	marketType, ok := c.Get("marketType")
-	if !ok {
-		c.JSON(200, gin.H{
-			"status": false, "msg": "请指定marketType参数",
-		})
-		return
-	}
-	c.JSON(200, gin.H{
-		"status": true, "msg": marketType,
 	})
 }

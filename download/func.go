@@ -9,19 +9,6 @@ func Expression(b bool, true interface{}, false interface{}) interface{} {
 	}
 }
 
-// Loc 搜索
-//func (df DataFrame) Loc(colName string, value interface{}) DataFrame {
-//	col := df.Col(colName)
-//
-//	var indexes []int
-//	for i:=0; i<col.Len(); i++ {
-//		if col.Elem(i) == value {
-//			indexes = append(indexes, i)
-//		}
-//	}
-//	return df.Subset(indexes)
-//}
-
 // SetCol 创建新列
 //func (df DataFrame) SetCol(colName string, value interface{}) DataFrame {
 //	s, ok := value.(series.Series)
