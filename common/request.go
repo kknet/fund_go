@@ -12,23 +12,17 @@ const (
 // myRequest
 // 目前只支持Get请求
 type myRequest struct {
-	url       string
-	method    string
-	setCookie bool // 配置雪球Cookie
-	r         *http.Request
-	c         *http.Client
-	body      []byte
+	url    string
+	method string
+	r      *http.Request
+	c      *http.Client
+	body   []byte
 }
 
 // NewGetRequest
 // GET请求
 func NewGetRequest(url string, setCookie ...bool) *myRequest {
-	res := &myRequest{url: url, method: "GET", setCookie: false}
-	for _, i := range setCookie {
-		if i {
-			res.setCookie = true
-		}
-	}
+	res := &myRequest{url: url, method: "GET"}
 	return GetHttpRequest(res)
 }
 
@@ -36,9 +30,6 @@ func GetHttpRequest(p *myRequest) *myRequest {
 	request, err := http.NewRequest(p.method, p.url, nil)
 	if err != nil {
 		panic(err)
-	}
-	if p.setCookie {
-		request.Header.Add("cookie", COOKIE)
 	}
 	// 保存request到MyRequest中
 	p.r = request

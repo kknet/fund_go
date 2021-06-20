@@ -32,6 +32,8 @@ func GetCList(c *gin.Context) {
 	switch c.Query("chart") {
 	case "minute", "trends":
 		data = common.GoFunc(data, AddSimpleMinute)
+	case "60day":
+		data = common.GoFunc(data, Add60day)
 	}
 	c.JSON(200, gin.H{
 		"status": true, "data": data,

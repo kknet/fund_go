@@ -36,7 +36,7 @@ func ConnectMgo() *qmgo.Database {
 	return db
 }
 
-// Update 更新实时数据
+// Update 更新实时数据至mongo
 func Update() {
 	info, _ := KlineDB.QueryInterface("select code,sw,industry,area from stock")
 	df := dataframe.LoadMaps(info)

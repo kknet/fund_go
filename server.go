@@ -5,8 +5,11 @@ import (
 	"fund_go2/api/real"
 	"fund_go2/download"
 	"github.com/gin-gonic/gin"
+	jsoniter "github.com/json-iterator/go"
 	"net/http"
 )
+
+var json = jsoniter.ConfigCompatibleWithStandardLibrary
 
 /* 主函数 */
 func main() {
@@ -15,6 +18,18 @@ func main() {
 
 	// 启动后台下载
 	download.GoDownload()
+
+	//start := time.Now()
+	//for i:=0; i<9999999; i++ {
+	//}
+	//fmt.Println(time.Since(start))
+	//
+	//start = time.Now()
+	//for i:=0; i<9999999; i++ {
+	//}
+	//fmt.Println(time.Since(start))
+	//
+	//time.Sleep(time.Hour)
 
 	// 设置日志
 	//gin.DisableConsoleColor()

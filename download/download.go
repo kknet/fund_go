@@ -1,6 +1,7 @@
 package download
 
 import (
+	"fmt"
 	"fund_go2/common"
 	"github.com/go-gota/gota/dataframe"
 	"github.com/go-gota/gota/series"
@@ -54,6 +55,8 @@ func calData(df dataframe.DataFrame, marketType string) dataframe.DataFrame {
 	for _, col := range basic.Names() {
 		df = df.Mutate(basic.Col(col))
 	}
+	df = df.SetCol("marketType", Expression(marketType == "CNIndex", "CN", marketType))
+	df = df.SetCol("type", Expression(marketType == "CNIndex", "index", "stock"))
 
 	// 计算指标
 	indexes := []string{"price", "close", "high", "low", "vol", "total_share", "float_share", "内盘", "外盘", "amount"}
@@ -70,13 +73,7 @@ func calData(df dataframe.DataFrame, marketType string) dataframe.DataFrame {
 		})
 	})
 	_ = pct.SetNames("pct_chg", "amp", "tr", "mc", "fmc", "net")
-
-	for _, col := range pct.Names() {
-		df = df.Mutate(pct.Col(col))
-	}
-
-	df = df.SetCol("marketType", Expression(marketType == "CNIndex", "CN", marketType))
-	df = df.SetCol("type", Expression(marketType == "CNIndex", "index", "stock"))
+	df = df.CBind(pct).Drop([]string{"内盘", "外盘"})
 
 	//主力资金流向
 	if marketType == "CN" {
@@ -92,7 +89,7 @@ func calData(df dataframe.DataFrame, marketType string) dataframe.DataFrame {
 		_ = data.SetNames("main_net", "main_in", "main_out")
 		df = df.CBind(data)
 	}
-	df = df.Drop([]string{"内盘", "外盘"})
+
 	return df
 }
 
@@ -104,7 +101,7 @@ func getEastMoney(marketType string) {
 		"HK":      "m:116+t:1,m:116+t:2,m:116+t:3,m:116+t:4",
 		"US":      "m:105,m:106,m:107",
 	}
-	url := "https://push2.eastmoney.com/api/qt/clist/get?po=1&fid=f6&pz=7500&np=1&fltt=2&pn=1&fs=" + fs[marketType] + "&fields="
+	url := "https://push2.eastmoney.com/api/qt/clist/get?po=1&fid=f6&pz=8000&np=1&fltt=2&pn=1&fs=" + fs[marketType] + "&fields="
 	// 重命名
 	name := map[string]string{
 		"f2": "price", "f5": "vol", "f6": "amount", "f15": "high", "f16": "low",
@@ -133,6 +130,7 @@ func getEastMoney(marketType string) {
 	request := common.NewGetRequest(url)
 	for {
 		body, err := request.Do()
+		start := time.Now()
 		if err != nil {
 			log.Println("下载股票数据发生错误，", err.Error())
 		}
@@ -154,8 +152,10 @@ func getEastMoney(marketType string) {
 
 		AllStock[marketType] = calData(df, marketType)
 
+		fmt.Println(marketType, "解析总用时：", time.Since(start))
+
 		if marketType == "CN" {
-			CalIndustry()
+			go CalIndustry()
 		}
 		MyChan <- marketType
 
@@ -163,9 +163,10 @@ func getEastMoney(marketType string) {
 			time.Sleep(time.Millisecond * 500)
 		}
 		if marketType == "CNIndex" {
-			time.Sleep(time.Second * 1)
+			time.Sleep(time.Millisecond * 500)
 		}
 		time.Sleep(time.Millisecond * 200)
+		time.Sleep(time.Hour)
 	}
 }
 

@@ -38,7 +38,6 @@ func GetStockList(codes []string) []map[string]interface{} {
 
 // AddSimpleMinute 添加简略分时行情
 func AddSimpleMinute(items map[string]interface{}) {
-
 	var info []string
 	url := "https://push2.eastmoney.com/api/qt/stock/trends2/get?fields1=f1,f5,f8,f10,f11&fields2=f53&iscr=0&secid="
 
@@ -62,10 +61,19 @@ func AddSimpleMinute(items map[string]interface{}) {
 	}
 }
 
-// Add60Day 添加60日行情
-func Add60Day(items map[string]interface{}) interface{} {
-	url := "https://push2.eastmoney.com/api/qt/stock/details/get?fields1=f1&fields2=f51,f52,f53,f55&pos=-999999&secid="
-	return url
+// Add60day 添加60日行情
+func Add60day(items map[string]interface{}) {
+	url := "https://push2his.eastmoney.com/api/qt/stock/kline/get?fields1=f1&fields2=f51,f53&klt=101&fqt=0&end=20500101&lmt=60&secid="
+	body, _ := common.NewGetRequest(url + items["cid"].(string)).Do()
+
+	var info []string
+	json.Get(body, "data", "klines").ToVal(&info)
+
+	df := dataframe.ReadCSV(strings.NewReader("date,price\n" + strings.Join(info, "\n")))
+
+	items["chart"] = bson.M{
+		"date": df.Col("date").Records(), "price": df.Col("price").Float(),
+	}
 }
 
 // GetMinuteData 获取分时行情
