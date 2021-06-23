@@ -85,7 +85,6 @@ func SendCList() {
 		for i := range newData {
 			if newData[i]["pct_chg"] != c.data[i]["pct_chg"] {
 				c.data[i] = newData[i]
-				real.AddSimpleMinute(newData[i])
 				// 写入
 				err = c.Conn.WriteJSON(newData[i])
 				// 错误 关闭连接

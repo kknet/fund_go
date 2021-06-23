@@ -42,37 +42,45 @@ func AddSimpleMinute(items map[string]interface{}) {
 	url := "https://push2.eastmoney.com/api/qt/stock/trends2/get?fields1=f1,f5,f8,f10,f11&fields2=f53&iscr=0&secid="
 
 	body, _ := common.NewGetRequest(url + items["cid"].(string)).Do()
-	total := json.Get(body, "data", "trendsTotal").ToFloat32()
+	total := json.Get(body, "data", "trendsTotal").ToInt()
+	preClose := json.Get(body, "data", "preClose").ToFloat32()
+	timestamp := json.Get(body, "data", "time").ToInt()
 	json.Get(body, "data", "trends").ToVal(&info)
 
 	// 间隔
 	space := 3
 	results := make([]float64, 0)
+	times := make([]string, 0)
 
 	for i := 0; i < len(info); i += space {
-		item := strings.Split(info[i], ",")[1]
-		data, _ := strconv.ParseFloat(item, 8)
+		item := strings.Split(info[i], ",")
+		data, _ := strconv.ParseFloat(item[1], 8)
 		results = append(results, data)
+		times = append(times, item[0])
 	}
+	times = append(times, "now")
 	results = append(results, items["price"].(float64))
 
 	items["chart"] = bson.M{
-		"trends": results, "total": total, "space": space,
+		"time": times, "price": results,
+		"total": total / space, "close": preClose, "timestamp": timestamp,
 	}
 }
 
 // Add60day 添加60日行情
 func Add60day(items map[string]interface{}) {
-	url := "https://push2his.eastmoney.com/api/qt/stock/kline/get?fields1=f1&fields2=f51,f53&klt=101&fqt=0&end=20500101&lmt=60&secid="
+	url := "https://push2his.eastmoney.com/api/qt/stock/kline/get?fields1=f1,f6&fields2=f51,f53&klt=101&fqt=0&end=20500101&lmt=60&secid="
 	body, _ := common.NewGetRequest(url + items["cid"].(string)).Do()
 
 	var info []string
+	preClose := json.Get(body, "data", "preKPrice").ToFloat32()
 	json.Get(body, "data", "klines").ToVal(&info)
 
-	df := dataframe.ReadCSV(strings.NewReader("date,price\n" + strings.Join(info, "\n")))
+	df := dataframe.ReadCSV(strings.NewReader("time,price\n" + strings.Join(info, "\n")))
 
 	items["chart"] = bson.M{
-		"date": df.Col("date").Records(), "price": df.Col("price").Float(),
+		"time": df.Col("time").Records(), "price": df.Col("price").Float(),
+		"total": 60, "close": preClose,
 	}
 }
 
@@ -80,19 +88,30 @@ func Add60day(items map[string]interface{}) {
 func GetMinuteData(code string) interface{} {
 	cid := GetStockList([]string{code})
 	if len(cid) == 0 {
-		return errors.New("改代码不存在")
+		return errors.New("该代码不存在")
 	}
-	url := "https://push2.eastmoney.com/api/qt/stock/trends2/get?fields1=f1&fields2=f51,f53,f56,f57,f58&iscr=0&secid="
+	url := "https://push2.eastmoney.com/api/qt/stock/trends2/get?fields1=f1,f5,f8&fields2=f51,f53,f56,f57,f58&iscr=0&secid="
 	body, _ := common.NewGetRequest(url + cid[0]["cid"].(string)).Do()
 
 	var info []string
 	json.Get(body, "data", "trends").ToVal(&info)
+	preClose := json.Get(body, "data", "preClose").ToFloat64()
 	df := dataframe.ReadCSV(strings.NewReader("time,price,vol,amount,avg\n" + strings.Join(info, "\n")))
 
-	return map[string]interface{}{
-		"time":  df.Col("time").String(),
-		"price": df.Col("price").Float(), "vol": df.Col("vol").Float(),
-		"amount": df.Col("amount").Float(), "avg": df.Col("avg").Float(),
+	// 添加color
+	color := make([]int, df.Nrow())
+	for index, i := range df.Col("price").Float() {
+		if i >= preClose {
+			color[index] = 1
+		} else {
+			color[index] = 0
+		}
+		preClose = i
+	}
+	return bson.M{
+		"time": df.Col("time").Records(), "price": df.Col("price").Float(),
+		"vol": df.Col("vol").Float(), "amount": df.Col("amount").Float(),
+		"avg": df.Col("avg").Float(), "color": color,
 	}
 }
 
@@ -100,9 +119,13 @@ func GetMinuteData(code string) interface{} {
 func search(input string) []map[string]interface{} {
 	var results []map[string]interface{}
 
+	indexes := []string{"code", "name", "pct_chg", "price", "type", "marketType", "amount"}
 	// 优先展示CN, HK、US按成交额自由排序
-	for _, mkt := range []string{"CN", "HK", "US", "CNIndex"} {
-		df := download.AllStock[mkt].Select([]string{"code", "name", "pct_chg", "price", "type", "marketType", "amount"})
+	for _, mkt := range []string{"CN", "US", "CNIndex"} {
+		df := download.AllStock[mkt].Select(indexes)
+		if mkt == "CN" {
+			df = df.RBind(download.AllStock["HK"].Select(indexes)).Arrange(dataframe.RevSort("amount"))
+		}
 
 		for i, item := range df.Select([]string{"code", "name"}).Records() {
 			//转化为大写
@@ -112,7 +135,7 @@ func search(input string) []map[string]interface{} {
 			if strings.Contains(str, input) {
 				if i >= 1 {
 					results = append(results, df.Subset(i-1).Maps()...)
-					if len(results) > 12 {
+					if len(results) > 10 {
 						return results
 					}
 				}
