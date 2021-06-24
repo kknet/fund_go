@@ -78,12 +78,14 @@ func calData(df dataframe.DataFrame, marketType string) dataframe.DataFrame {
 	if marketType == "CN" {
 		data := df.Select([]string{"main_huge", "main_big", "main_pct"}).Rapply(func(s series.Series) series.Series {
 			value := s.Float()
+			var net, amount, in, out float64
 
-			net := value[0] + value[1]
-			amount := net / value[2] * 100
-			in := (net + amount) / 2.0
-			out := net - in
-
+			net = value[0] + value[1]
+			if value[2] != 0 {
+				amount = net / value[2] * 100
+				in = (net + amount) / 2.0
+				out = net - in
+			}
 			return series.Floats([]float64{net, in, out})
 		})
 		_ = data.SetNames("main_net", "main_in", "main_out")

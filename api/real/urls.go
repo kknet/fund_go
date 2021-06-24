@@ -11,12 +11,35 @@ import (
 
 // GetChart 获取图表数据
 func GetChart(c *gin.Context) {
-	code := c.Query("code")
-	//data := stock.GetSimpleMinute(code)
-	data := GetMinuteData(code)
-	c.JSON(200, gin.H{
-		"status": true, "data": data,
-	})
+	chartType := c.Param("chart_type")
+	switch chartType {
+	case "north":
+		data := GetNorthFlow()
+		c.JSON(200, gin.H{
+			"status": true, "data": data,
+		})
+	case "main_net":
+		data := GetMainNetFlow()
+		c.JSON(200, gin.H{
+			"status": true, "data": data,
+		})
+	case "minute":
+		code, ok := c.GetQuery("code")
+		if ok {
+			data := GetMinuteData(code)
+			c.JSON(200, gin.H{
+				"status": true, "data": data,
+			})
+		} else {
+			c.JSON(200, gin.H{
+				"status": false, "msg": "必须指定code参数",
+			})
+		}
+	default:
+		c.JSON(200, gin.H{
+			"status": false, "msg": "该页面不存在",
+		})
+	}
 }
 
 // GetCList 获取股票列表
@@ -78,12 +101,19 @@ func GetRank(c *gin.Context) {
 	})
 }
 
+// Search 搜索全市场股票
 func Search(c *gin.Context) {
-	input := c.Query("input")
-	data := search(input)
-	c.JSON(200, gin.H{
-		"status": true, "data": data,
-	})
+	input, ok := c.GetQuery("input")
+	if ok {
+		data := search(input)
+		c.JSON(200, gin.H{
+			"status": true, "data": data,
+		})
+	} else {
+		c.JSON(200, gin.H{
+			"status": false, "msg": "必须指定input参数",
+		})
+	}
 }
 
 // GetMarket 市场页面聚合接口

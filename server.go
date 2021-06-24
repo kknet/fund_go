@@ -42,7 +42,7 @@ func main() {
 	CList.GET("/rank", real.GetRank)
 	CList.GET("/search", real.Search)
 
-	Real.GET("/chart", real.GetChart)
+	Real.GET("/chart/:chart_type", real.GetChart)
 	Real.GET("/market", real.GetMarket)
 	Real.GET("/ticks", real.GetTicks)
 	Real.GET("/pankou", real.GetPanKou)

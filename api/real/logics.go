@@ -8,7 +8,6 @@ import (
 	"github.com/go-gota/gota/series"
 	jsoniter "github.com/json-iterator/go"
 	"go.mongodb.org/mongo-driver/bson"
-	"log"
 	"strconv"
 	"strings"
 )
@@ -276,14 +275,35 @@ func getNumbers(marketType string) bson.M {
 // GetNorthFlow 北向资金流向
 func GetNorthFlow() interface{} {
 	url := "https://push2.eastmoney.com/api/qt/kamt.rtmin/get?fields1=f1,f3&fields2=f52,f54,f56"
-	body, err := common.NewGetRequest(url).Do()
-	if err != nil {
-		log.Println(err)
-	}
+	body, _ := common.NewGetRequest(url).Do()
+
 	var str []string
 	json.Get(body, "data", "s2n").ToVal(&str)
 
-	//转dataframe
 	df := dataframe.ReadCSV(strings.NewReader("hgt,sgt,all\n" + strings.Join(str, "\n")))
-	return df.Maps()
+	return bson.M{
+		"hgt": df.Col("hgt").Float(),
+		"sgt": df.Col("sgt").Float(),
+		"all": df.Col("all").Float(),
+	}
+}
+
+// GetMainNetFlow 获取大盘主力资金流向
+func GetMainNetFlow() interface{} {
+	url := "https://push2.eastmoney.com/api/qt/stock/fflow/kline/get?lmt=0&klt=1&fields1=f1,f2,f3&fields2=f51,f52,f53,f54,f55,f56&secid=1.000001&secid2=0.399001"
+	body, _ := common.NewGetRequest(url).Do()
+
+	var str []string
+	json.Get(body, "data", "klines").ToVal(&str)
+
+	df := dataframe.ReadCSV(strings.NewReader("time,main_net,small,mid,big,huge\n" + strings.Join(str, "\n")))
+
+	return bson.M{
+		"time":     df.Col("time").Records(),
+		"main_net": df.Col("main_net").Float(),
+		"small":    df.Col("small").Float(),
+		"mid":      df.Col("mid").Float(),
+		"big":      df.Col("big").Float(),
+		"huge":     df.Col("huge").Float(),
+	}
 }
