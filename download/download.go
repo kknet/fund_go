@@ -6,6 +6,8 @@ import (
 	"github.com/go-gota/gota/series"
 	jsoniter "github.com/json-iterator/go"
 	"log"
+	"math"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -13,8 +15,6 @@ import (
 
 var json = jsoniter.ConfigCompatibleWithStandardLibrary
 
-// AllStock 存储所有股票数据
-var AllStock = map[string]dataframe.DataFrame{}
 var Industry = map[string]dataframe.DataFrame{}
 
 // MyChan 全局通道
@@ -35,22 +35,25 @@ func getGlobalChan() chan string {
 func calData(df dataframe.DataFrame, marketType string) dataframe.DataFrame {
 	//基本信息
 	basic := df.Select([]string{"cid", "code"}).Rapply(func(s series.Series) series.Series {
-		// code
-		code := s.Elem(1).String()
+		var code, cid, mktType, Type string
+		code = s.Elem(1).String()
+		cid = s.Elem(0).String() + "." + s.Elem(1).String()
+
 		switch marketType {
 		case "CN":
 			code += Expression(code[0] == '6', ".SH", ".SZ").(string)
+			mktType = "CN"
+			Type = "stock"
 		case "CNIndex":
 			code += Expression(code[0] == '0', ".SH", ".SZ").(string)
+			mktType = "CN"
+			Type = "index"
 		case "HK", "US":
 			code += "." + marketType
+			mktType = marketType
+			Type = "stock"
 		}
-		return series.Strings([]string{
-			s.Elem(0).String() + "." + s.Elem(1).String(), // cid
-			code,
-			Expression(marketType == "CNIndex", "CN", marketType).(string), // marketType
-			Expression(marketType == "CNIndex", "index", "stock").(string), // type
-		})
+		return series.Strings([]string{cid, code, mktType, Type})
 	})
 	_ = basic.SetNames("cid", "code", "marketType", "type")
 	for _, col := range basic.Names() {
@@ -61,15 +64,27 @@ func calData(df dataframe.DataFrame, marketType string) dataframe.DataFrame {
 	indexes := []string{"price", "close", "high", "low", "vol", "total_share", "float_share", "内盘", "外盘", "amount"}
 	pct := df.Select(indexes).Rapply(func(s series.Series) series.Series {
 		value := s.Float()
-
-		return series.Floats([]float64{
-			(value[0]/value[1] - 1.0) * 100,             // pct_chg
-			(value[2] - value[3]) / value[1] * 100,      // amp
-			value[4] / value[6] * 10000,                 // tr
-			value[0] * value[5],                         // mc
-			value[0] * value[6],                         // fmc
-			(value[8] - value[7]) * value[9] / value[4], // 均价
-		})
+		var pctChg, amp, tr, mc, fmc, net float64
+		// pct_chg amp
+		pctChg = (value[0]/value[1] - 1.0) * 100
+		amp = (value[2] - value[3]) / value[1] * 100
+		// tr mc fmc
+		if value[6] > 0 {
+			tr = value[4] / value[6] * 10000
+			mc = value[0] * value[5]
+			fmc = value[0] * value[6]
+		} else {
+			tr = math.NaN()
+			mc = math.NaN()
+			fmc = math.NaN()
+		}
+		// net
+		if value[7] > 0 && value[8] > 0 {
+			net = (value[8] - value[7]) * value[9] / value[4]
+		} else {
+			net = math.NaN()
+		}
+		return series.Floats([]float64{pctChg, amp, tr, mc, fmc, net})
 	})
 	_ = pct.SetNames("pct_chg", "amp", "tr", "mc", "fmc", "net")
 	df = df.CBind(pct).Drop([]string{"内盘", "外盘"})
@@ -95,23 +110,22 @@ func calData(df dataframe.DataFrame, marketType string) dataframe.DataFrame {
 }
 
 // 下载数据
-func getEastMoney(marketType string) {
+func getEastMoney(marketType string, page int) {
 	fs := map[string]string{
 		"CNIndex": "m:1+s:2,m:0+t:5",
 		"CN":      "m:0+t:6,m:0+t:80,m:1+t:2,m:1+t:23",
 		"HK":      "m:116+t:1,m:116+t:2,m:116+t:3,m:116+t:4",
 		"US":      "m:105,m:106,m:107",
 	}
-	url := "https://push2.eastmoney.com/api/qt/clist/get?po=1&fid=f6&pz=8000&np=1&fltt=2&pn=1&fs=" + fs[marketType] + "&fields="
+	url := "https://push2.eastmoney.com/api/qt/clist/get?po=1&fid=f6&pz=2500&np=1&fltt=2&pn="
+	url += strconv.Itoa(page) + "&fs=" + fs[marketType] + "&fields="
 	// 重命名
 	name := map[string]string{
 		"f2": "price", "f5": "vol", "f6": "amount", "f15": "high", "f16": "low",
 		"f17": "open", "f12": "code", "f10": "vr", "f13": "cid", "f14": "name", "f18": "close",
 		"f23": "pb", "f34": "外盘", "f35": "内盘",
-		"f22": "pct_rate", "f11": "pct5min", "f24": "pct60day", "f25": "pct_current_year",
-		"f38": "total_share", "f39": "float_share", "f115": "pe_ttm",
-		//"f100": "EMIds",
-		"f37": "roe",
+		//"f22": "pct_rate", "f11": "pct5min", "f24": "pct60day", "f25": "pct_current_year",
+		"f38": "total_share", "f39": "float_share", "f115": "pe_ttm", "f37": "roe",
 		//"f40": "营收", "f41": "营收同比", "f45": "净利润", "f46": "净利润同比",
 	}
 	if marketType == "CN" {
@@ -148,28 +162,31 @@ func getEastMoney(marketType string) {
 				df = df.Drop(col)
 			}
 		}
-		AllStock[marketType] = calData(df, marketType)
+		df = calData(df, marketType)
+		UpdateMongo(df)
 
-		if marketType == "CN" {
-			go CalIndustry()
-		}
+		//if marketType == "CN" {
+		//	go CalIndustry()
+		//}
 		MyChan <- marketType
 
 		for !common.IsOpen(marketType) {
 			time.Sleep(time.Millisecond * 500)
 		}
-		time.Sleep(time.Millisecond * 300)
+		if marketType == "CNIndex" {
+			time.Sleep(time.Millisecond * 500)
+		}
+		time.Sleep(time.Millisecond * 800)
 	}
 }
 
 // GoDownload 下载函数
 func GoDownload() {
-	go getEastMoney("CN")
-	go getEastMoney("CNIndex")
-	go getEastMoney("HK")
-	go getEastMoney("US")
-	go getEastMoney("US")
-
-	time.Sleep(time.Second * 3)
-	go Update()
+	go getEastMoney("CN", 1)
+	go getEastMoney("CN", 2)
+	go getEastMoney("CNIndex", 1)
+	go getEastMoney("HK", 1)
+	go getEastMoney("US", 1)
+	go getEastMoney("US", 2)
+	go getEastMoney("US", 3)
 }

@@ -9,9 +9,6 @@ import (
 func IsOpen(marketType string) bool {
 	// CN
 	if marketType == "CN" || marketType == "CNIndex" {
-		if marketType == "CN" {
-			return true
-		}
 		if time.Now().Weekday() <= 5 {
 			// 上午
 			if time.Now().Hour() == 9 && time.Now().Minute() >= 15 {

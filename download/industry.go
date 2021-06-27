@@ -9,6 +9,7 @@ import (
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/mongo"
 	"log"
+	"sync"
 	"xorm.io/xorm"
 )
 
@@ -16,6 +17,7 @@ var ctx = context.Background()
 
 var KlineDB = ConnectDB()
 var coll = ConnectMgo().Collection("market")
+var realColl = ConnectMgo().Collection("AllStock")
 
 // ConnectDB 连接数据库
 func ConnectDB() *xorm.Engine {
@@ -36,21 +38,40 @@ func ConnectMgo() *qmgo.Database {
 	return db
 }
 
-// Update 更新实时数据至mongo
-func Update() {
-	info, _ := KlineDB.QueryInterface("select code,sw,industry,area from stock")
-	df := dataframe.LoadMaps(info)
+func UpdateMongo(df dataframe.DataFrame) {
+	group := sync.WaitGroup{}
+	group.Add(3)
 
-	indexes := []string{"code", "name", "pct_chg", "mc", "float_share", "vol", "amount", "main_net", "net"}
-	df = df.InnerJoin(AllStock["CN"].Select(indexes), "code")
+	maps := df.Maps()
+	length := df.Nrow()
 
-	for _, item := range df.Maps() {
-		err := coll.UpdateId(ctx, item["code"], bson.M{"$set": item})
-		if err != nil {
-			log.Println("mongo upsert error: ", err)
+	myFunc := func(items []map[string]interface{}) {
+		for _, i := range items {
+			_, _ = realColl.UpsertId(ctx, i["code"], i)
 		}
+		group.Done()
 	}
+	go myFunc(maps[:length/3])
+	go myFunc(maps[length/3+1 : length/3*2])
+	go myFunc(maps[length/3*2+1:])
+	group.Wait()
 }
+
+// Update 更新实时数据至mongo
+//func Update() {
+//	info, _ := KlineDB.QueryInterface("select code,sw,industry,area from stock")
+//	df := dataframe.LoadMaps(info)
+//
+//	indexes := []string{"cid", "marketType", "code", "name", "pct_chg", "mc", "float_share", "vol", "amount", "main_net", "net"}
+//	df = df.InnerJoin(AllStock["CN"].Select(indexes), "code")
+//
+//	for _, item := range df.Maps() {
+//		_, err := coll.UpsertId(ctx, item["code"], item)
+//		if err != nil {
+//			log.Println("mongo upsert error: ", err)
+//		}
+//	}
+//}
 
 func CalIndustry() {
 	for _, idsName := range []string{"sw", "industry", "area"} {

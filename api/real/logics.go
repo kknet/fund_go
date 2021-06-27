@@ -1,6 +1,7 @@
 package real
 
 import (
+	"context"
 	"errors"
 	"fund_go2/common"
 	"fund_go2/download"
@@ -8,31 +9,23 @@ import (
 	"github.com/go-gota/gota/series"
 	jsoniter "github.com/json-iterator/go"
 	"go.mongodb.org/mongo-driver/bson"
+	"go.mongodb.org/mongo-driver/mongo"
 	"strconv"
 	"strings"
 )
 
 // jsoniter
 var json = jsoniter.ConfigCompatibleWithStandardLibrary
+var ctx = context.Background()
+
+var realColl = download.ConnectMgo().Collection("AllStock")
 
 // GetStockList 获取多只股票信息
 func GetStockList(codes []string) []map[string]interface{} {
 	var data []map[string]interface{}
-	for _, df := range download.AllStock {
-		data = append(data, df.Filter(dataframe.F{Colname: "code", Comparator: series.In, Comparando: codes}).Maps()...)
-	}
-	// 排序整理
-	var results []map[string]interface{}
-	for _, c := range codes {
-		for _, item := range data {
-			if item["code"].(string) == c {
-				// 添加行业数据
-				results = append(results, item)
-				break
-			}
-		}
-	}
-	return results
+
+	_ = realColl.Find(ctx, bson.M{"_id": bson.M{"$in": codes}}).All(&data)
+	return data
 }
 
 // AddSimpleMinute 添加简略分时行情
@@ -117,47 +110,32 @@ func GetMinuteData(code string) interface{} {
 // Search 搜索股票
 func search(input string) []map[string]interface{} {
 	var results []map[string]interface{}
+	match := bson.M{"$or": bson.A{
+		// 正则匹配 不区分大小写
+		bson.M{"_id": bson.M{"$regex": input, "$options": "i"}, "marketType": "CN", "type": "stock"},
+		bson.M{"name": bson.M{"$regex": input, "$options": "i"}, "marketType": "CN", "type": "stock"},
 
-	indexes := []string{"code", "name", "pct_chg", "price", "type", "marketType", "amount"}
-	// 优先展示CN, HK、US按成交额自由排序
-	for _, mkt := range []string{"CN", "US", "CNIndex"} {
-		df := download.AllStock[mkt].Select(indexes)
-		if mkt == "CN" {
-			df = df.RBind(download.AllStock["HK"].Select(indexes)).Arrange(dataframe.RevSort("amount"))
-		}
+		bson.M{"_id": bson.M{"$regex": input, "$options": "i"}, "marketType": "HK"},
+		bson.M{"name": bson.M{"$regex": input, "$options": "i"}, "marketType": "HK"},
 
-		for i, item := range df.Select([]string{"code", "name"}).Records() {
-			//转化为大写
-			input = strings.ToUpper(input)
-			str := strings.ToUpper(item[0] + " " + item[1])
-
-			if strings.Contains(str, input) {
-				if i >= 1 {
-					results = append(results, df.Subset(i-1).Maps()...)
-					if len(results) > 10 {
-						return results
-					}
-				}
-			}
-		}
-	}
+		bson.M{"_id": bson.M{"$regex": input, "$options": "i"}, "marketType": "US"},
+		bson.M{"name": bson.M{"$regex": input, "$options": "i"}, "marketType": "US"},
+	}}
+	_ = realColl.Find(ctx, match).Limit(12).All(&results)
 	return results
 }
 
 // getRank 全市场排行
 func getRank(opt *common.RankOpt) []map[string]interface{} {
-	indexes := make([]int, 20)
+	var results []map[string]interface{}
+	var size int64 = 20
 
-	for i := 0; i < 20; i++ {
-		indexes[i] = (opt.Page-1)*20 + i
+	sortName := opt.SortName
+	if opt.Sorted == false {
+		sortName = "-" + sortName
 	}
-	order := dataframe.RevSort(opt.SortName)
-	if opt.Sorted == true {
-		order = dataframe.Sort(opt.SortName)
-	}
-	data := download.AllStock[opt.MarketType].Arrange(order).Subset(indexes)
-
-	return data.Maps()
+	_ = realColl.Find(ctx, bson.M{"marketType": opt.MarketType, "type": "stock"}).Limit(opt.Page * size).Sort(sortName).All(&results)
+	return results[(opt.Page-1)*size:]
 }
 
 // PanKou 获取五档挂单明细
@@ -229,47 +207,64 @@ func formatStock(input string) (string, error) {
 
 // getNumbers 获取涨跌分布
 func getNumbers(marketType string) bson.M {
-	df := download.AllStock[marketType]
+	var temp []bson.M
+	_ = realColl.Aggregate(ctx, mongo.Pipeline{
+		bson.D{{"$match", bson.M{"marketType": marketType, "type": "stock"}}},
+		bson.D{{"$group", bson.M{
+			"_id":     nil,
+			"pct_chg": bson.M{"$push": "$pct_chg"},
+			"wb":      bson.M{"$push": "$wb"},
+		}}},
+	}).All(&temp)
 
-	label := []string{"<10", "<7", "7-5", "5-3", "3-0", "0", "0-3", "3-5", "5-7", ">7", ">10"}
-	value := []int{
-		df.Filter(dataframe.F{Colname: "pct_chg", Comparator: series.Less, Comparando: -10}).Nrow(),
+	res := make([]int32, 11)
+	pct := temp[0]["pct_chg"].(bson.A)
+	wb := temp[0]["wb"].(bson.A)
 
-		df.Filter(dataframe.F{Colname: "pct_chg", Comparator: series.GreaterEq, Comparando: -20}).
-			Filter(dataframe.F{Colname: "pct_chg", Comparator: series.Less, Comparando: -7}).Nrow(),
+	for i := range temp {
+		p := pct[i].(float64) //涨跌幅pct_chg
+		w := wb[i].(float64)
 
-		df.Filter(dataframe.F{Colname: "pct_chg", Comparator: series.Less, Comparando: -5}).
-			Filter(dataframe.F{Colname: "pct_chg", Comparator: series.GreaterEq, Comparando: -7}).Nrow(),
+		if p < -7 {
+			res[1]++
+		} else if p < -5 {
+			res[2]++
+		} else if p < -3 {
+			res[3]++
+		} else if p < 0 {
+			res[4]++
+		} else if p == 0 {
+			res[5]++
+		} else if p <= 3 {
+			res[6]++
+		} else if p <= 5 {
+			res[7]++
+		} else if p <= 7 {
+			res[8]++
+		} else if p > 7 {
+			res[9]++
+		}
 
-		df.Filter(dataframe.F{Colname: "pct_chg", Comparator: series.Less, Comparando: -3}).
-			Filter(dataframe.F{Colname: "pct_chg", Comparator: series.GreaterEq, Comparando: -5}).Nrow(),
-
-		df.Filter(dataframe.F{Colname: "pct_chg", Comparator: series.Less, Comparando: 0}).
-			Filter(dataframe.F{Colname: "pct_chg", Comparator: series.GreaterEq, Comparando: -3}).Nrow(),
-
-		df.Filter(dataframe.F{Colname: "pct_chg", Comparator: series.Eq, Comparando: 0}).Nrow(),
-
-		df.Filter(dataframe.F{Colname: "pct_chg", Comparator: series.Greater, Comparando: 0}).
-			Filter(dataframe.F{Colname: "pct_chg", Comparator: series.LessEq, Comparando: 3}).Nrow(),
-
-		df.Filter(dataframe.F{Colname: "pct_chg", Comparator: series.Greater, Comparando: 3}).
-			Filter(dataframe.F{Colname: "pct_chg", Comparator: series.LessEq, Comparando: 5}).Nrow(),
-
-		df.Filter(dataframe.F{Colname: "pct_chg", Comparator: series.Greater, Comparando: 5}).
-			Filter(dataframe.F{Colname: "pct_chg", Comparator: series.LessEq, Comparando: 7}).Nrow(),
-
-		df.Filter(dataframe.F{Colname: "pct_chg", Comparator: series.Greater, Comparando: 7}).Nrow(),
-
-		df.Filter(dataframe.F{Colname: "pct_chg", Comparator: series.Eq, Comparando: 10}).Nrow(),
+		if marketType != "CN" {
+			if p < -10 {
+				res[0]++
+			} else if p > 10 {
+				res[10]++
+			}
+		} else {
+			if w == -100 {
+				res[0]++
+			} else if w == 100 {
+				res[10]++
+			}
+		}
 	}
-
-	if marketType == "CN" {
-		label[0] = "跌停"
-		value[0] = df.Filter(dataframe.F{Colname: "wb", Comparator: series.Eq, Comparando: -100}).Nrow()
-		label[10] = "涨停"
-		value[10] = df.Filter(dataframe.F{Colname: "wb", Comparator: series.Eq, Comparando: 100}).Nrow()
+	label := []string{"跌停", "<7", "7-5", "5-3", "3-0", "0", "0-3", "3-5", "5-7", ">7", "涨停"}
+	if marketType != "CN" {
+		label[0] = "<10"
+		label[10] = ">10"
 	}
-	return bson.M{"label": label, "value": value}
+	return bson.M{"label": label, "value": res}
 }
 
 // GetNorthFlow 北向资金流向
