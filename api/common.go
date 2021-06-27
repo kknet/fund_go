@@ -12,7 +12,7 @@ import (
 type MyConn struct {
 	Conn      *websocket.Conn
 	codes     []string
-	data      []map[string]interface{} // 初始化数据 用于判断更新
+	data      []bson.M // 初始化数据 用于判断更新
 	uid       string
 	CountDown time.Time
 	Type      string // 连接类型

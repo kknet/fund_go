@@ -5,7 +5,7 @@ import (
 	"sync"
 )
 
-func GoFunc(data []map[string]interface{}, myFunc func(m map[string]interface{})) []map[string]interface{} {
+func GoFunc(data []bson.M, myFunc func(m bson.M)) []bson.M {
 	// 多协程
 	group := sync.WaitGroup{}
 	group.Add(len(data))

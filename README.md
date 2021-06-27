@@ -10,7 +10,7 @@ https://lucario.ltd
 4. 使用struct替代map[string]interface{}解析json数据, 大大提高解析速度
 
 数据
-1. 实时行情数据使用dataframe-go储存
+1. 实时行情数据使用mongoDB储存
 
 网站特色
 1. 包含沪深、港、美所有股票数据

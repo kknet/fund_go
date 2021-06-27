@@ -21,15 +21,14 @@ var ctx = context.Background()
 var realColl = download.ConnectMgo().Collection("AllStock")
 
 // GetStockList 获取多只股票信息
-func GetStockList(codes []string) []map[string]interface{} {
-	var data []map[string]interface{}
-
+func GetStockList(codes []string) []bson.M {
+	var data []bson.M
 	_ = realColl.Find(ctx, bson.M{"_id": bson.M{"$in": codes}}).All(&data)
 	return data
 }
 
 // AddSimpleMinute 添加简略分时行情
-func AddSimpleMinute(items map[string]interface{}) {
+func AddSimpleMinute(items bson.M) {
 	var info []string
 	url := "https://push2.eastmoney.com/api/qt/stock/trends2/get?fields1=f1,f5,f8,f10,f11&fields2=f53&iscr=0&secid="
 
@@ -60,7 +59,7 @@ func AddSimpleMinute(items map[string]interface{}) {
 }
 
 // Add60day 添加60日行情
-func Add60day(items map[string]interface{}) {
+func Add60day(items bson.M) {
 	url := "https://push2his.eastmoney.com/api/qt/stock/kline/get?fields1=f1,f6&fields2=f51,f53&klt=101&fqt=0&end=20500101&lmt=60&secid="
 	body, _ := common.NewGetRequest(url + items["cid"].(string)).Do()
 
@@ -108,8 +107,8 @@ func GetMinuteData(code string) interface{} {
 }
 
 // Search 搜索股票
-func search(input string) []map[string]interface{} {
-	var results []map[string]interface{}
+func search(input string) []bson.M {
+	var results []bson.M
 	match := bson.M{"$or": bson.A{
 		// 正则匹配 不区分大小写
 		bson.M{"_id": bson.M{"$regex": input, "$options": "i"}, "marketType": "CN", "type": "stock"},
@@ -121,20 +120,20 @@ func search(input string) []map[string]interface{} {
 		bson.M{"_id": bson.M{"$regex": input, "$options": "i"}, "marketType": "US"},
 		bson.M{"name": bson.M{"$regex": input, "$options": "i"}, "marketType": "US"},
 	}}
-	_ = realColl.Find(ctx, match).Limit(12).All(&results)
+	_ = realColl.Find(ctx, match).Limit(10).All(&results)
 	return results
 }
 
 // getRank 全市场排行
-func getRank(opt *common.RankOpt) []map[string]interface{} {
-	var results []map[string]interface{}
+func getRank(opt *common.RankOpt) []bson.M {
+	var results []bson.M
 	var size int64 = 20
 
 	sortName := opt.SortName
 	if opt.Sorted == false {
 		sortName = "-" + sortName
 	}
-	_ = realColl.Find(ctx, bson.M{"marketType": opt.MarketType, "type": "stock"}).Limit(opt.Page * size).Sort(sortName).All(&results)
+	_ = realColl.Find(ctx, bson.M{"marketType": opt.MarketType, "type": "stock"}).Sort(sortName).Limit(opt.Page * size).All(&results)
 	return results[(opt.Page-1)*size:]
 }
 

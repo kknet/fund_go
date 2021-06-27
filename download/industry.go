@@ -38,22 +38,20 @@ func ConnectMgo() *qmgo.Database {
 	return db
 }
 
-func UpdateMongo(df dataframe.DataFrame) {
+func UpdateMongo(items []Stock) {
 	group := sync.WaitGroup{}
 	group.Add(3)
 
-	maps := df.Maps()
-	length := df.Nrow()
-
-	myFunc := func(items []map[string]interface{}) {
-		for _, i := range items {
-			_, _ = realColl.UpsertId(ctx, i["code"], i)
+	length := len(items)
+	myFunc := func(item []Stock) {
+		for _, i := range item {
+			_, _ = realColl.UpsertId(ctx, i.Code, i)
 		}
 		group.Done()
 	}
-	go myFunc(maps[:length/3])
-	go myFunc(maps[length/3+1 : length/3*2])
-	go myFunc(maps[length/3*2+1:])
+	go myFunc(items[:length/3])
+	go myFunc(items[length/3+1 : length/3*2])
+	go myFunc(items[length/3*2+1:])
 	group.Wait()
 }
 

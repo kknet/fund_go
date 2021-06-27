@@ -44,7 +44,7 @@ func GetChart(c *gin.Context) {
 
 // GetCList 获取股票列表
 func GetCList(c *gin.Context) {
-	var data []map[string]interface{}
+	var data []bson.M
 	// 指定code
 	codes := c.Query("code")
 	if codes != "" {
