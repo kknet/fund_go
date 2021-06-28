@@ -5,7 +5,6 @@ import (
 	"github.com/go-gota/gota/dataframe"
 	jsoniter "github.com/json-iterator/go"
 	"log"
-	"math"
 	"strconv"
 	"sync"
 	"time"
@@ -33,7 +32,6 @@ func getGlobalChan() chan string {
 func calData(stocks []Stock, marketType string) []Stock {
 	for i := range stocks {
 		s := &stocks[i]
-
 		//基本信息
 		s.Cid = strconv.Itoa(s.C) + "." + s.Code
 		switch marketType {
@@ -48,32 +46,28 @@ func calData(stocks []Stock, marketType string) []Stock {
 		s.Type = Expression(marketType == "CNIndex", "index", "stock").(string)
 
 		// 计算指标
-		s.PctChg = (s.Price/s.Close - 1) * 100
-		s.Amp = (s.High - s.Low) / s.Close * 100
+		if s.Close > 0 {
+			s.PctChg = (s.Price/s.Close - 1) * 100
+			s.Amp = (s.High - s.Low) / s.Close * 100
+		} else {
+			continue
+		}
 		// mc fmc tr
 		if s.TotalShare > 0 {
 			s.Mc = s.TotalShare * s.Price
 			s.Fmc = s.FloatShare * s.Price
-			s.Tr = s.Vol / s.TotalShare * 100
-		} else {
-			s.Mc = math.NaN()
-			s.Fmc = math.NaN()
-			s.Tr = math.NaN()
+			s.Tr = s.Vol / s.TotalShare * 10000
 		}
 		// net
 		if s.Buy > 0 && s.Sell > 0 {
-			s.Net = (s.Buy - s.Sell) / (s.Amount / s.Vol)
+			s.Net = (s.Buy - s.Sell) * s.Amount / s.Vol
 		}
 		// 主力净流入
-		if marketType == "CN" {
+		if marketType == "CN" && s.MainPct != 0 {
 			s.MainNet = s.MainHuge + s.MainBig
-			amount := s.MainNet / s.MainPct
+			amount := s.MainNet / s.MainPct * 100
 			s.MainIn = (s.MainNet + amount) / 2
 			s.MainOut = s.MainNet - s.MainIn
-		} else {
-			s.MainNet = math.NaN()
-			s.MainIn = math.NaN()
-			s.MainOut = math.NaN()
 		}
 	}
 	return stocks
@@ -132,9 +126,6 @@ func getEastMoney(marketType string, page int) {
 		for !common.IsOpen(marketType) {
 			time.Sleep(time.Millisecond * 500)
 		}
-		if marketType == "CNIndex" {
-			time.Sleep(time.Millisecond * 500)
-		}
 		time.Sleep(time.Millisecond * 800)
 	}
 }
@@ -148,4 +139,7 @@ func GoDownload() {
 	go getEastMoney("US", 1)
 	go getEastMoney("US", 2)
 	go getEastMoney("US", 3)
+
+	time.Sleep(time.Second * 3)
+	go CalIndustry()
 }

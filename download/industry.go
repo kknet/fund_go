@@ -16,7 +16,6 @@ import (
 var ctx = context.Background()
 
 var KlineDB = ConnectDB()
-var coll = ConnectMgo().Collection("market")
 var realColl = ConnectMgo().Collection("AllStock")
 
 // ConnectDB 连接数据库
@@ -45,7 +44,7 @@ func UpdateMongo(items []Stock) {
 	length := len(items)
 	myFunc := func(item []Stock) {
 		for _, i := range item {
-			_, _ = realColl.UpsertId(ctx, i.Code, i)
+			_ = realColl.UpdateId(ctx, i.Code, bson.M{"$set": i})
 		}
 		group.Done()
 	}
@@ -56,34 +55,29 @@ func UpdateMongo(items []Stock) {
 }
 
 // Update 更新实时数据至mongo
-//func Update() {
-//	info, _ := KlineDB.QueryInterface("select code,sw,industry,area from stock")
-//	df := dataframe.LoadMaps(info)
-//
-//	indexes := []string{"cid", "marketType", "code", "name", "pct_chg", "mc", "float_share", "vol", "amount", "main_net", "net"}
-//	df = df.InnerJoin(AllStock["CN"].Select(indexes), "code")
-//
-//	for _, item := range df.Maps() {
-//		_, err := coll.UpsertId(ctx, item["code"], item)
-//		if err != nil {
-//			log.Println("mongo upsert error: ", err)
-//		}
-//	}
-//}
+func Update() {
+	info, _ := KlineDB.QueryInterface("select ts_code,industry,sw,sw_code,area from stock")
+
+	for _, i := range info {
+		tsCode := i["ts_code"]
+		delete(i, "ts_code")
+		_ = realColl.UpdateId(ctx, tsCode, bson.M{"$set": i})
+	}
+}
 
 func CalIndustry() {
+	Update()
 	for _, idsName := range []string{"sw", "industry", "area"} {
 		var results []map[string]interface{}
-		err := coll.Aggregate(ctx, mongo.Pipeline{
+		err := realColl.Aggregate(ctx, mongo.Pipeline{
 			// 去掉停牌
-			bson.D{{"$match", bson.M{idsName: bson.M{"$ne": "NaN"}, "vol": bson.M{"$gt": 0}}}},
+			bson.D{{"$match", bson.M{idsName: bson.M{"$nin": bson.A{"NaN", nil, "null"}}, "vol": bson.M{"$gt": 0}}}},
 			bson.D{{"$sort", bson.M{"pct_chg": -1}}},
 			bson.D{{"$group", bson.M{
 				"_id":         "$" + idsName,
+				"code":        bson.M{"$first": "$sw_code"},
 				"max_pct":     bson.M{"$first": "$pct_chg"},
-				"min_pct":     bson.M{"$last": "$pct_chg"},
 				"领涨股":         bson.M{"$first": "$name"},
-				"领跌股":         bson.M{"$last": "$name"},
 				"count":       bson.M{"$sum": 1},
 				"main_net":    bson.M{"$sum": "$main_net"},
 				"net":         bson.M{"$sum": "$net"},

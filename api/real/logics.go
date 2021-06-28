@@ -9,7 +9,6 @@ import (
 	"github.com/go-gota/gota/series"
 	jsoniter "github.com/json-iterator/go"
 	"go.mongodb.org/mongo-driver/bson"
-	"go.mongodb.org/mongo-driver/mongo"
 	"strconv"
 	"strings"
 )
@@ -109,32 +108,47 @@ func GetMinuteData(code string) interface{} {
 // Search 搜索股票
 func search(input string) []bson.M {
 	var results []bson.M
-	match := bson.M{"$or": bson.A{
+	var temp []bson.M
+
+	for _, marketType := range []string{"CN", "HK", "US"} {
 		// 正则匹配 不区分大小写
-		bson.M{"_id": bson.M{"$regex": input, "$options": "i"}, "marketType": "CN", "type": "stock"},
-		bson.M{"name": bson.M{"$regex": input, "$options": "i"}, "marketType": "CN", "type": "stock"},
+		_ = realColl.Find(ctx, bson.M{"$or": bson.A{
+			bson.M{"_id": bson.M{"$regex": input, "$options": "i"}, "marketType": marketType, "type": "stock"},
+			bson.M{"name": bson.M{"$regex": input, "$options": "i"}, "marketType": marketType, "type": "stock"},
+		},
+		}).Limit(10).All(&temp)
+		results = append(results, temp...)
 
-		bson.M{"_id": bson.M{"$regex": input, "$options": "i"}, "marketType": "HK"},
-		bson.M{"name": bson.M{"$regex": input, "$options": "i"}, "marketType": "HK"},
+		if len(results) >= 10 {
+			return results[0:10]
+		}
+	}
+	_ = realColl.Find(ctx, bson.M{"$or": bson.A{
+		bson.M{"_id": bson.M{"$regex": input, "$options": "i"}, "marketType": "CN", "type": "index"},
+		bson.M{"name": bson.M{"$regex": input, "$options": "i"}, "marketType": "CN", "type": "index"},
+	},
+	}).Limit(10).All(&temp)
+	results = append(results, temp...)
 
-		bson.M{"_id": bson.M{"$regex": input, "$options": "i"}, "marketType": "US"},
-		bson.M{"name": bson.M{"$regex": input, "$options": "i"}, "marketType": "US"},
-	}}
-	_ = realColl.Find(ctx, match).Limit(10).All(&results)
+	if len(results) >= 10 {
+		return results[0:10]
+	}
 	return results
 }
 
 // getRank 全市场排行
 func getRank(opt *common.RankOpt) []bson.M {
 	var results []bson.M
-	var size int64 = 20
+	var size int64 = 15
 
 	sortName := opt.SortName
 	if opt.Sorted == false {
 		sortName = "-" + sortName
 	}
-	_ = realColl.Find(ctx, bson.M{"marketType": opt.MarketType, "type": "stock"}).Sort(sortName).Limit(opt.Page * size).All(&results)
-	return results[(opt.Page-1)*size:]
+	_ = realColl.Find(ctx, bson.M{
+		"marketType": opt.MarketType, "type": "stock",
+	}).Sort(sortName).Skip(size * (opt.Page - 1)).Limit(size).All(&results)
+	return results
 }
 
 // PanKou 获取五档挂单明细
@@ -206,64 +220,29 @@ func formatStock(input string) (string, error) {
 
 // getNumbers 获取涨跌分布
 func getNumbers(marketType string) bson.M {
-	var temp []bson.M
-	_ = realColl.Aggregate(ctx, mongo.Pipeline{
-		bson.D{{"$match", bson.M{"marketType": marketType, "type": "stock"}}},
-		bson.D{{"$group", bson.M{
-			"_id":     nil,
-			"pct_chg": bson.M{"$push": "$pct_chg"},
-			"wb":      bson.M{"$push": "$wb"},
-		}}},
-	}).All(&temp)
-
-	res := make([]int32, 11)
-	pct := temp[0]["pct_chg"].(bson.A)
-	wb := temp[0]["wb"].(bson.A)
-
-	for i := range temp {
-		p := pct[i].(float64) //涨跌幅pct_chg
-		w := wb[i].(float64)
-
-		if p < -7 {
-			res[1]++
-		} else if p < -5 {
-			res[2]++
-		} else if p < -3 {
-			res[3]++
-		} else if p < 0 {
-			res[4]++
-		} else if p == 0 {
-			res[5]++
-		} else if p <= 3 {
-			res[6]++
-		} else if p <= 5 {
-			res[7]++
-		} else if p <= 7 {
-			res[8]++
-		} else if p > 7 {
-			res[9]++
-		}
-
-		if marketType != "CN" {
-			if p < -10 {
-				res[0]++
-			} else if p > 10 {
-				res[10]++
-			}
-		} else {
-			if w == -100 {
-				res[0]++
-			} else if w == 100 {
-				res[10]++
-			}
-		}
-	}
 	label := []string{"跌停", "<7", "7-5", "5-3", "3-0", "0", "0-3", "3-5", "5-7", ">7", "涨停"}
-	if marketType != "CN" {
+	num := make([]int64, 11)
+
+	if marketType == "CN" {
+		num[0], _ = realColl.Find(ctx, bson.M{"marketType": marketType, "type": "stock", "wb": -100}).Count()
+		num[10], _ = realColl.Find(ctx, bson.M{"marketType": marketType, "type": "stock", "wb": 100}).Count()
+	} else {
 		label[0] = "<10"
 		label[10] = ">10"
+		num[0], _ = realColl.Find(ctx, bson.M{"marketType": marketType, "pct_chg": bson.M{"$lt": -10}}).Count()
+		num[10], _ = realColl.Find(ctx, bson.M{"marketType": marketType, "pct_chg": bson.M{"$gt": 10}}).Count()
 	}
-	return bson.M{"label": label, "value": res}
+	num[1], _ = realColl.Find(ctx, bson.M{"marketType": marketType, "type": "stock", "pct_chg": bson.M{"$lt": -7}}).Count()
+	num[2], _ = realColl.Find(ctx, bson.M{"marketType": marketType, "type": "stock", "pct_chg": bson.M{"$lt": -5, "$gte": -7}}).Count()
+	num[3], _ = realColl.Find(ctx, bson.M{"marketType": marketType, "type": "stock", "pct_chg": bson.M{"$lt": -3, "$gte": -5}}).Count()
+	num[4], _ = realColl.Find(ctx, bson.M{"marketType": marketType, "type": "stock", "pct_chg": bson.M{"$lt": -0, "$gte": -3}}).Count()
+	num[5], _ = realColl.Find(ctx, bson.M{"marketType": marketType, "type": "stock", "pct_chg": 0}).Count()
+	num[6], _ = realColl.Find(ctx, bson.M{"marketType": marketType, "type": "stock", "pct_chg": bson.M{"$gt": 0, "$lte": 3}}).Count()
+	num[7], _ = realColl.Find(ctx, bson.M{"marketType": marketType, "type": "stock", "pct_chg": bson.M{"$gt": 3, "$lte": 5}}).Count()
+	num[8], _ = realColl.Find(ctx, bson.M{"marketType": marketType, "type": "stock", "pct_chg": bson.M{"$gt": 5, "$lte": 7}}).Count()
+	num[9], _ = realColl.Find(ctx, bson.M{"marketType": marketType, "type": "stock", "pct_chg": bson.M{"$gt": 7}}).Count()
+
+	return bson.M{"label": label, "value": num}
 }
 
 // GetNorthFlow 北向资金流向
