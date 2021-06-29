@@ -34,7 +34,6 @@ type Stock struct {
 	Pct60Day float64 `json:"f24" bson:"pct60day"`
 	PctYear  float64 `json:"f25" bson:"pct_year"`
 	Wb       float64 `json:"f33"`
-	Roe      float64 `json:"f37"`
 
 	TotalShare float64 `json:"f38" bson:"total_share"`
 	FloatShare float64 `json:"f39" bson:"float_share"`

@@ -46,14 +46,14 @@ func AddSimpleMinute(items bson.M) {
 		item := strings.Split(info[i], ",")
 		data, _ := strconv.ParseFloat(item[1], 8)
 		results = append(results, data)
-		times = append(times, item[0])
 	}
-	times = append(times, "now")
+	for i := 0; i < (total / space); i++ {
+		times = append(times, "x")
+	}
 	results = append(results, items["price"].(float64))
 
 	items["chart"] = bson.M{
-		"time": times, "price": results,
-		"total": total / space, "close": preClose, "timestamp": timestamp,
+		"time": times, "price": results, "close": preClose, "timestamp": timestamp,
 	}
 }
 
@@ -69,8 +69,7 @@ func Add60day(items bson.M) {
 	df := dataframe.ReadCSV(strings.NewReader("time,price\n" + strings.Join(info, "\n")))
 
 	items["chart"] = bson.M{
-		"time": df.Col("time").Records(), "price": df.Col("price").Float(),
-		"total": 60, "close": preClose,
+		"time": df.Col("time").Records(), "price": df.Col("price").Float(), "close": preClose,
 	}
 }
 
@@ -98,6 +97,7 @@ func GetMinuteData(code string) interface{} {
 		}
 		preClose = i
 	}
+
 	return bson.M{
 		"time": df.Col("time").Records(), "price": df.Col("price").Float(),
 		"vol": df.Col("vol").Float(), "amount": df.Col("amount").Float(),
@@ -116,7 +116,7 @@ func search(input string) []bson.M {
 			bson.M{"_id": bson.M{"$regex": input, "$options": "i"}, "marketType": marketType, "type": "stock"},
 			bson.M{"name": bson.M{"$regex": input, "$options": "i"}, "marketType": marketType, "type": "stock"},
 		},
-		}).Limit(10).All(&temp)
+		}).Sort("-amount").Limit(10).All(&temp)
 		results = append(results, temp...)
 
 		if len(results) >= 10 {
@@ -136,7 +136,7 @@ func search(input string) []bson.M {
 	return results
 }
 
-// getRank 全市场排行
+// getRank 市场排行
 func getRank(opt *common.RankOpt) []bson.M {
 	var results []bson.M
 	var size int64 = 15

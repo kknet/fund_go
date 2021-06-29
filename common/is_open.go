@@ -39,7 +39,7 @@ func IsOpen(marketType string) bool {
 		if time.Now().Weekday() <= 5 && 21 <= time.Now().Hour() {
 			return true
 		}
-		if time.Now().Weekday() == 5 && time.Now().Hour() <= 6 {
+		if time.Now().Weekday() <= 5 && time.Now().Hour() <= 6 {
 			return true
 		}
 		return false

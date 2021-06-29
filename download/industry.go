@@ -2,8 +2,6 @@ package download
 
 import (
 	"context"
-	"github.com/go-gota/gota/dataframe"
-	"github.com/go-gota/gota/series"
 	_ "github.com/lib/pq"
 	"github.com/qiniu/qmgo"
 	"go.mongodb.org/mongo-driver/bson"
@@ -54,8 +52,8 @@ func UpdateMongo(items []Stock) {
 	group.Wait()
 }
 
-// Update 更新实时数据至mongo
-func Update() {
+// UpdateBasic 更新地区 申万行业 板块
+func UpdateBasic() {
 	info, _ := KlineDB.QueryInterface("select ts_code,industry,sw,sw_code,area from stock")
 
 	for _, i := range info {
@@ -66,9 +64,8 @@ func Update() {
 }
 
 func CalIndustry() {
-	Update()
 	for _, idsName := range []string{"sw", "industry", "area"} {
-		var results []map[string]interface{}
+		var results []bson.M
 		err := realColl.Aggregate(ctx, mongo.Pipeline{
 			// 去掉停牌
 			bson.D{{"$match", bson.M{idsName: bson.M{"$nin": bson.A{"NaN", nil, "null"}}, "vol": bson.M{"$gt": 0}}}},
@@ -92,24 +89,20 @@ func CalIndustry() {
 		if err != nil {
 			log.Println(err)
 		}
-		df := dataframe.LoadMaps(results).Rename("name", "_id")
 
-		// 计算指标
-		indexes := []string{"vol", "float_share", "power", "mc"}
-		pct := df.Select(indexes).Rapply(func(s series.Series) series.Series {
-			value := s.Float()
-			return series.Floats([]float64{
-				value[0] / value[1] * 10000, // tr
-				value[2] / value[3],         // pct_chg
-			})
-		})
-		_ = pct.SetNames("tr", "pct_chg")
+		for _, i := range results {
+			i["name"] = i["_id"]
+			i["tr"] = i["vol"].(float64) / i["float_share"].(float64) * 10000
+			i["pct_chg"] = i["power"].(float64) / i["mc"].(float64)
 
-		for _, col := range pct.Names() {
-			df = df.Mutate(pct.Col(col))
+			if idsName != "sw" {
+				delete(i, "code")
+			}
+			delete(i, "_id")
+			delete(i, "power")
+			delete(i, "float_share")
 		}
-		df = df.Drop([]string{"power", "float_share"})
 
-		Industry[idsName] = df
+		Industry[idsName] = results
 	}
 }

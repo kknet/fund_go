@@ -2,6 +2,7 @@ package main
 
 import (
 	apiV1 "fund_go2/api"
+	"fund_go2/api/fina"
 	"fund_go2/api/real"
 	"fund_go2/download"
 	"github.com/gin-gonic/gin"
@@ -35,6 +36,8 @@ func main() {
 
 	// Real 实时数据
 	Real := v1.Group("/stock")
+	// Fina 财务数据
+	Fina := v1.Group("/fina")
 
 	// CList
 	CList := Real.Group("/clist")
@@ -46,6 +49,10 @@ func main() {
 	Real.GET("/market", real.GetMarket)
 	Real.GET("/ticks", real.GetTicks)
 	Real.GET("/pankou", real.GetPanKou)
+
+	// Fina
+	Fina.GET("/get", fina.GetFina)
+	Fina.GET("/filter", fina.Filter)
 
 	// WebSocket
 	wsStock := ws.Group("/stock")
