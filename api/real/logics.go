@@ -22,7 +22,20 @@ var realColl = download.ConnectMgo().Collection("AllStock")
 // GetStockList 获取多只股票信息
 func GetStockList(codes []string) []bson.M {
 	var data []bson.M
-	_ = realColl.Find(ctx, bson.M{"_id": bson.M{"$in": codes}}).All(&data)
+	var temp []bson.M
+
+	_ = realColl.Find(ctx, bson.M{"_id": bson.M{"$in": codes}}).All(&temp)
+
+	for _, c := range codes {
+		for _, item := range temp {
+			if c == item["_id"] {
+				delete(item, "_id")
+				delete(item, "c")
+				data = append(data, item)
+				break
+			}
+		}
+	}
 	return data
 }
 

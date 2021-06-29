@@ -39,13 +39,16 @@ func UpdateMongo(items []Stock) {
 	group := sync.WaitGroup{}
 	group.Add(3)
 
-	length := len(items)
-	myFunc := func(item []Stock) {
-		for _, i := range item {
-			_ = realColl.UpdateId(ctx, i.Code, bson.M{"$set": i})
+	myFunc := func(s []Stock) {
+		myBulk := realColl.Bulk()
+		for i := range s {
+			myBulk = myBulk.UpdateId(s[i].Code, bson.M{"$set": s[i]})
 		}
+		_, _ = myBulk.Run(ctx)
 		group.Done()
 	}
+
+	length := len(items)
 	go myFunc(items[:length/3])
 	go myFunc(items[length/3+1 : length/3*2])
 	go myFunc(items[length/3*2+1:])
@@ -82,6 +85,7 @@ func CalIndustry() {
 				"amount":      bson.M{"$sum": "$amount"},
 				"float_share": bson.M{"$sum": "$float_share"},
 				"mc":          bson.M{"$sum": "$mc"},
+				"fmc":         bson.M{"$sum": "$fmc"},
 				"power":       bson.M{"$sum": bson.M{"$multiply": bson.A{"$mc", "$pct_chg"}}},
 			}}},
 		}).All(&results)

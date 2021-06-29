@@ -12,7 +12,6 @@ import (
 var json = jsoniter.ConfigCompatibleWithStandardLibrary
 
 var Industry = map[string]interface{}{}
-var IndustryCount = 0
 
 // MyChan 全局通道
 var MyChan = getGlobalChan()
@@ -74,15 +73,14 @@ func calData(stocks []Stock, marketType string) []Stock {
 }
 
 // 下载数据
-func getEastMoney(marketType string, page int) {
+func getEastMoney(marketType string) {
 	fs := map[string]string{
 		"CNIndex": "m:1+s:2,m:0+t:5",
 		"CN":      "m:0+t:6,m:0+t:80,m:1+t:2,m:1+t:23",
 		"HK":      "m:116+t:1,m:116+t:2,m:116+t:3,m:116+t:4",
 		"US":      "m:105,m:106,m:107",
 	}
-	url := "https://push2.eastmoney.com/api/qt/clist/get?po=1&fid=f6&pz=2500&np=1&fltt=2&pn="
-	url += strconv.Itoa(page) + "&fs=" + fs[marketType] + "&fields="
+	url := "https://push2.eastmoney.com/api/qt/clist/get?po=1&fid=f6&pz=7500&np=1&fltt=2&pn=1&fs=" + fs[marketType] + "&fields="
 	// 重命名
 	name := map[string]string{
 		"f2": "price", "f5": "vol", "f6": "amount", "f15": "high", "f16": "low",
@@ -117,19 +115,15 @@ func getEastMoney(marketType string, page int) {
 		data := calData(info.Data.Diff, marketType)
 		UpdateMongo(data)
 
-		if marketType == "CN" && IndustryCount == 5 {
+		if marketType == "CN" {
 			go CalIndustry()
-			IndustryCount = 0
-		} else {
-			IndustryCount++
 		}
-
 		MyChan <- marketType
 
 		for !common.IsOpen(marketType) {
 			time.Sleep(time.Millisecond * 500)
 		}
-		time.Sleep(time.Millisecond * 800)
+		time.Sleep(time.Millisecond * 300)
 	}
 }
 
@@ -138,11 +132,9 @@ func GoDownload() {
 	UpdateBasic()
 	CalIndustry()
 
-	go getEastMoney("CN", 1)
-	go getEastMoney("CN", 2)
-	go getEastMoney("CNIndex", 1)
-	go getEastMoney("HK", 1)
-	go getEastMoney("US", 1)
-	go getEastMoney("US", 2)
-	go getEastMoney("US", 3)
+	go getEastMoney("CN")
+	go getEastMoney("CNIndex")
+	go getEastMoney("HK")
+	go getEastMoney("US")
+	go getEastMoney("US")
 }
