@@ -17,26 +17,38 @@ import (
 var json = jsoniter.ConfigCompatibleWithStandardLibrary
 var ctx = context.Background()
 
-var realColl = download.ConnectMgo().Collection("AllStock")
-
 // GetStockList 获取多只股票信息
 func GetStockList(codes []string) []bson.M {
+	var results []bson.M
 	var data []bson.M
-	var temp []bson.M
 
-	_ = realColl.Find(ctx, bson.M{"_id": bson.M{"$in": codes}}).All(&temp)
+	for i := range download.CollDict {
+		var items []bson.M
+		_ = download.CollDict[i].Find(ctx, bson.M{"_id": bson.M{"$in": codes}}).All(&items)
+		data = append(data, items...)
+	}
 
 	for _, c := range codes {
-		for _, item := range temp {
+		for _, item := range data {
 			if c == item["_id"] {
+				// 删除临时数据
 				delete(item, "_id")
 				delete(item, "c")
-				data = append(data, item)
+				// 添加行业数据
+				for _, ids := range []string{"sw", "industry", "area"} {
+					sw, ok := item[ids].(string)
+					if ok {
+						var info bson.M
+						_ = download.CollDict["Index"].Find(ctx, bson.M{"name": sw}).One(&info)
+						item[ids] = info
+					}
+				}
+				results = append(results, item)
 				break
 			}
 		}
 	}
-	return data
+	return results
 }
 
 // AddSimpleMinute 添加简略分时行情
@@ -110,9 +122,15 @@ func GetMinuteData(code string) interface{} {
 		}
 		preClose = i
 	}
+	// time切片
+	times := make([]string, df.Nrow())
+	for index, i := range df.Col("time").Records() {
+		items := strings.Split(i, " ")
+		times[index] = items[1]
+	}
 
 	return bson.M{
-		"time": df.Col("time").Records(), "price": df.Col("price").Float(),
+		"time": times, "price": df.Col("price").Float(),
 		"vol": df.Col("vol").Float(), "amount": df.Col("amount").Float(),
 		"avg": df.Col("avg").Float(), "color": color,
 	}
@@ -121,13 +139,13 @@ func GetMinuteData(code string) interface{} {
 // Search 搜索股票
 func search(input string) []bson.M {
 	var results []bson.M
-	var temp []bson.M
 
 	for _, marketType := range []string{"CN", "HK", "US"} {
+		var temp []bson.M
 		// 正则匹配 不区分大小写
-		_ = realColl.Find(ctx, bson.M{"$or": bson.A{
-			bson.M{"_id": bson.M{"$regex": input, "$options": "i"}, "marketType": marketType, "type": "stock"},
-			bson.M{"name": bson.M{"$regex": input, "$options": "i"}, "marketType": marketType, "type": "stock"},
+		_ = download.CollDict[marketType].Find(ctx, bson.M{"$or": bson.A{
+			bson.M{"_id": bson.M{"$regex": input, "$options": "i"}},
+			bson.M{"name": bson.M{"$regex": input, "$options": "i"}},
 		},
 		}).Sort("-amount").Limit(10).All(&temp)
 		results = append(results, temp...)
@@ -136,9 +154,10 @@ func search(input string) []bson.M {
 			return results[0:10]
 		}
 	}
-	_ = realColl.Find(ctx, bson.M{"$or": bson.A{
-		bson.M{"_id": bson.M{"$regex": input, "$options": "i"}, "marketType": "CN", "type": "index"},
-		bson.M{"name": bson.M{"$regex": input, "$options": "i"}, "marketType": "CN", "type": "index"},
+	var temp []bson.M
+	_ = download.CollDict["Index"].Find(ctx, bson.M{"$or": bson.A{
+		bson.M{"_id": bson.M{"$regex": input, "$options": "i"}},
+		bson.M{"name": bson.M{"$regex": input, "$options": "i"}},
 	},
 	}).Limit(10).All(&temp)
 	results = append(results, temp...)
@@ -158,9 +177,7 @@ func getRank(opt *common.RankOpt) []bson.M {
 	if opt.Sorted == false {
 		sortName = "-" + sortName
 	}
-	_ = realColl.Find(ctx, bson.M{
-		"marketType": opt.MarketType, "type": "stock",
-	}).Sort(sortName).Skip(size * (opt.Page - 1)).Limit(size).All(&results)
+	_ = download.CollDict[opt.MarketType].Find(ctx, bson.M{}).Sort(sortName).Skip(size * (opt.Page - 1)).Limit(size).All(&results)
 	return results
 }
 
@@ -237,23 +254,23 @@ func getNumbers(marketType string) bson.M {
 	num := make([]int64, 11)
 
 	if marketType == "CN" {
-		num[0], _ = realColl.Find(ctx, bson.M{"marketType": marketType, "type": "stock", "wb": -100}).Count()
-		num[10], _ = realColl.Find(ctx, bson.M{"marketType": marketType, "type": "stock", "wb": 100}).Count()
+		num[0], _ = download.CollDict[marketType].Find(ctx, bson.M{"wb": -100}).Count()
+		num[10], _ = download.CollDict[marketType].Find(ctx, bson.M{"wb": 100}).Count()
 	} else {
 		label[0] = "<10"
 		label[10] = ">10"
-		num[0], _ = realColl.Find(ctx, bson.M{"marketType": marketType, "pct_chg": bson.M{"$lt": -10}}).Count()
-		num[10], _ = realColl.Find(ctx, bson.M{"marketType": marketType, "pct_chg": bson.M{"$gt": 10}}).Count()
+		num[0], _ = download.CollDict[marketType].Find(ctx, bson.M{"pct_chg": bson.M{"$lt": -10}}).Count()
+		num[10], _ = download.CollDict[marketType].Find(ctx, bson.M{"pct_chg": bson.M{"$gt": 10}}).Count()
 	}
-	num[1], _ = realColl.Find(ctx, bson.M{"marketType": marketType, "type": "stock", "pct_chg": bson.M{"$lt": -7}}).Count()
-	num[2], _ = realColl.Find(ctx, bson.M{"marketType": marketType, "type": "stock", "pct_chg": bson.M{"$lt": -5, "$gte": -7}}).Count()
-	num[3], _ = realColl.Find(ctx, bson.M{"marketType": marketType, "type": "stock", "pct_chg": bson.M{"$lt": -3, "$gte": -5}}).Count()
-	num[4], _ = realColl.Find(ctx, bson.M{"marketType": marketType, "type": "stock", "pct_chg": bson.M{"$lt": -0, "$gte": -3}}).Count()
-	num[5], _ = realColl.Find(ctx, bson.M{"marketType": marketType, "type": "stock", "pct_chg": 0}).Count()
-	num[6], _ = realColl.Find(ctx, bson.M{"marketType": marketType, "type": "stock", "pct_chg": bson.M{"$gt": 0, "$lte": 3}}).Count()
-	num[7], _ = realColl.Find(ctx, bson.M{"marketType": marketType, "type": "stock", "pct_chg": bson.M{"$gt": 3, "$lte": 5}}).Count()
-	num[8], _ = realColl.Find(ctx, bson.M{"marketType": marketType, "type": "stock", "pct_chg": bson.M{"$gt": 5, "$lte": 7}}).Count()
-	num[9], _ = realColl.Find(ctx, bson.M{"marketType": marketType, "type": "stock", "pct_chg": bson.M{"$gt": 7}}).Count()
+	num[1], _ = download.CollDict[marketType].Find(ctx, bson.M{"pct_chg": bson.M{"$lt": -7}}).Count()
+	num[2], _ = download.CollDict[marketType].Find(ctx, bson.M{"pct_chg": bson.M{"$lt": -5, "$gte": -7}}).Count()
+	num[3], _ = download.CollDict[marketType].Find(ctx, bson.M{"pct_chg": bson.M{"$lt": -3, "$gte": -5}}).Count()
+	num[4], _ = download.CollDict[marketType].Find(ctx, bson.M{"pct_chg": bson.M{"$lt": -0, "$gte": -3}}).Count()
+	num[5], _ = download.CollDict[marketType].Find(ctx, bson.M{"pct_chg": 0}).Count()
+	num[6], _ = download.CollDict[marketType].Find(ctx, bson.M{"pct_chg": bson.M{"$gt": 0, "$lte": 3}}).Count()
+	num[7], _ = download.CollDict[marketType].Find(ctx, bson.M{"pct_chg": bson.M{"$gt": 3, "$lte": 5}}).Count()
+	num[8], _ = download.CollDict[marketType].Find(ctx, bson.M{"pct_chg": bson.M{"$gt": 5, "$lte": 7}}).Count()
+	num[9], _ = download.CollDict[marketType].Find(ctx, bson.M{"pct_chg": bson.M{"$gt": 7}}).Count()
 
 	return bson.M{"label": label, "value": num}
 }

@@ -126,12 +126,17 @@ func GetMarket(c *gin.Context) {
 		return
 	}
 	if marketType == "CN" {
+		var industry, sw, area []bson.M
+		_ = download.CollDict["Index"].Find(ctx, bson.M{"type": "industry"}).All(&industry)
+		_ = download.CollDict["Index"].Find(ctx, bson.M{"type": "sw"}).All(&sw)
+		_ = download.CollDict["Index"].Find(ctx, bson.M{"type": "area"}).All(&area)
+
 		c.JSON(200, gin.H{
 			"status": true, "data": bson.M{
 				"numbers":  getNumbers(marketType),
-				"industry": download.Industry["industry"],
-				"sw":       download.Industry["sw"],
-				"area":     download.Industry["area"],
+				"industry": industry,
+				"sw":       sw,
+				"area":     area,
 			},
 		})
 	} else {

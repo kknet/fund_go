@@ -14,7 +14,7 @@ import (
 var ctx = context.Background()
 
 var KlineDB = ConnectDB()
-var realColl = ConnectMgo().Collection("AllStock")
+var CollDict = InitMongo()
 
 // ConnectDB 连接数据库
 func ConnectDB() *xorm.Engine {
@@ -26,28 +26,43 @@ func ConnectDB() *xorm.Engine {
 	return db
 }
 
-func ConnectMgo() *qmgo.Database {
+func InitMongo() map[string]*qmgo.Collection {
 	client, err := qmgo.NewClient(ctx, &qmgo.Config{Uri: "mongodb://localhost:27017"})
 	if err != nil {
 		panic(err)
 	}
 	db := client.Database("stock")
-	return db
+
+	collDict := map[string]*qmgo.Collection{
+		"CN":    db.Collection("CN"),
+		"HK":    db.Collection("HK"),
+		"US":    db.Collection("US"),
+		"Index": db.Collection("Index"), // 存放指数，板块，申万行业
+	}
+	return collDict
 }
 
-func UpdateMongo(items []Stock) {
+func UpdateMongo(items []Stock, marketType string) {
 	group := sync.WaitGroup{}
 	group.Add(3)
 
 	myFunc := func(s []Stock) {
-		myBulk := realColl.Bulk()
+		myBulk := CollDict[marketType].Bulk()
+		// 初始化事务
 		for i := range s {
+			// 合法性
+			if marketType != "Index" && s[i].TotalShare <= 0 {
+				continue
+			}
 			myBulk = myBulk.UpdateId(s[i].Code, bson.M{"$set": s[i]})
+			//myBulk = myBulk.UpsertId(s[i].Code, s[i])
 		}
-		_, _ = myBulk.Run(ctx)
+		_, err := myBulk.Run(ctx)
+		if err != nil {
+			log.Println("更新Mongo错误：", err)
+		}
 		group.Done()
 	}
-
 	length := len(items)
 	go myFunc(items[:length/3])
 	go myFunc(items[length/3+1 : length/3*2])
@@ -62,14 +77,15 @@ func UpdateBasic() {
 	for _, i := range info {
 		tsCode := i["ts_code"]
 		delete(i, "ts_code")
-		_ = realColl.UpdateId(ctx, tsCode, bson.M{"$set": i})
+		_ = CollDict["CN"].UpdateId(ctx, tsCode, bson.M{"$set": i})
 	}
 }
 
 func CalIndustry() {
+	var results []bson.M
+
 	for _, idsName := range []string{"sw", "industry", "area"} {
-		var results []bson.M
-		err := realColl.Aggregate(ctx, mongo.Pipeline{
+		err := CollDict["CN"].Aggregate(ctx, mongo.Pipeline{
 			// 去掉停牌
 			bson.D{{"$match", bson.M{idsName: bson.M{"$nin": bson.A{"NaN", nil, "null"}}, "vol": bson.M{"$gt": 0}}}},
 			bson.D{{"$sort", bson.M{"pct_chg": -1}}},
@@ -83,30 +99,32 @@ func CalIndustry() {
 				"net":         bson.M{"$sum": "$net"},
 				"vol":         bson.M{"$sum": "$vol"},
 				"amount":      bson.M{"$sum": "$amount"},
-				"float_share": bson.M{"$sum": "$float_share"},
 				"mc":          bson.M{"$sum": "$mc"},
 				"fmc":         bson.M{"$sum": "$fmc"},
+				"float_share": bson.M{"$sum": "$float_share"},
 				"power":       bson.M{"$sum": bson.M{"$multiply": bson.A{"$mc", "$pct_chg"}}},
 			}}},
 		}).All(&results)
 
 		if err != nil {
-			log.Println(err)
+			log.Println("CalIndustry错误: ", err)
 		}
-
 		for _, i := range results {
 			i["name"] = i["_id"]
+			i["type"] = idsName
 			i["tr"] = i["vol"].(float64) / i["float_share"].(float64) * 10000
 			i["pct_chg"] = i["power"].(float64) / i["mc"].(float64)
 
-			if idsName != "sw" {
-				delete(i, "code")
-			}
 			delete(i, "_id")
 			delete(i, "power")
 			delete(i, "float_share")
 		}
 
-		Industry[idsName] = results
+		for _, i := range results {
+			_, err = CollDict["Index"].UpsertId(ctx, idsName+i["name"].(string), i)
+			if err != nil {
+				log.Println(err)
+			}
+		}
 	}
 }
