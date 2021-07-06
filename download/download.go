@@ -12,7 +12,7 @@ import (
 
 var json = jsoniter.ConfigCompatibleWithStandardLibrary
 
-var Industry = map[string]interface{}{}
+var IndustryCount int
 
 // MyChan 全局通道
 var MyChan = getGlobalChan()
@@ -123,7 +123,12 @@ func getEastMoney(marketType string, page int) {
 		UpdateMongo(data, marketType)
 
 		if marketType == "CN" {
-			go CalIndustry()
+			IndustryCount++
+			// 间隔更新行业数据
+			if IndustryCount >= 6 {
+				go CalIndustry()
+				IndustryCount = 0
+			}
 		}
 		MyChan <- marketType
 

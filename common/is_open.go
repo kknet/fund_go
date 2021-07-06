@@ -1,25 +1,25 @@
 package common
 
-import (
-	_ "github.com/lib/pq"
-	"time"
-)
+import "time"
 
 // IsOpen 判断是否开市
 func IsOpen(marketType string) bool {
+	hour := time.Now().Hour()
+	minute := time.Now().Minute()
+
 	// CN
-	if marketType == "CN" || marketType == "CNIndex" {
+	if marketType == "CN" || marketType == "Index" {
 		if time.Now().Weekday() <= 5 {
 			// 上午
-			if time.Now().Hour() == 9 && time.Now().Minute() >= 15 {
+			if hour == 9 && minute >= 15 {
 				return true
-			} else if time.Now().Hour() == 10 {
+			} else if hour == 10 {
 				return true
-			} else if time.Now().Hour() == 11 && time.Now().Minute() < 30 {
+			} else if hour == 11 && minute < 30 {
 				return true
 			}
 			//下午
-			if 13 <= time.Now().Hour() && time.Now().Hour() < 15 {
+			if 13 <= hour && hour < 15 {
 				return true
 			}
 		}
@@ -27,19 +27,19 @@ func IsOpen(marketType string) bool {
 		// HK
 	} else if marketType == "HK" {
 		if time.Now().Weekday() <= 5 {
-			if 9 <= time.Now().Hour() && time.Now().Hour() < 12 {
+			if 9 <= hour && hour < 12 {
 				return true
-			} else if 13 <= time.Now().Hour() && time.Now().Hour() < 16 {
+			} else if 13 <= hour && hour < 16 {
 				return true
 			}
 		}
 		return false
 		// US
 	} else if marketType == "US" {
-		if time.Now().Weekday() <= 5 && 21 <= time.Now().Hour() {
+		if time.Now().Weekday() <= 5 && 21 <= hour {
 			return true
 		}
-		if time.Now().Weekday() <= 5 && time.Now().Hour() <= 6 {
+		if time.Now().Weekday() <= 5 && hour <= 6 {
 			return true
 		}
 		return false

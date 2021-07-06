@@ -48,6 +48,7 @@ func UpdateMongo(items []Stock, marketType string) {
 
 	myFunc := func(s []Stock) {
 		myBulk := CollDict[marketType].Bulk()
+
 		// 初始化事务
 		for i := range s {
 			// 合法性
@@ -95,7 +96,8 @@ func CalIndustry() {
 				"max_pct":     bson.M{"$first": "$pct_chg"},
 				"领涨股":         bson.M{"$first": "$name"},
 				"count":       bson.M{"$sum": 1},
-				"main_net":    bson.M{"$sum": "$main_net"},
+				"main_in":     bson.M{"$sum": "$main_in"},
+				"main_out":    bson.M{"$sum": "$main_out"},
 				"net":         bson.M{"$sum": "$net"},
 				"vol":         bson.M{"$sum": "$vol"},
 				"amount":      bson.M{"$sum": "$amount"},
@@ -114,6 +116,8 @@ func CalIndustry() {
 			i["type"] = idsName
 			i["tr"] = i["vol"].(float64) / i["float_share"].(float64) * 10000
 			i["pct_chg"] = i["power"].(float64) / i["mc"].(float64)
+			i["main_net"] = i["main_in"].(float64) + i["main_out"].(float64)
+			i["main_pct"] = i["main_net"].(float64) / (i["main_in"].(float64) - i["main_out"].(float64)) * 100
 
 			delete(i, "_id")
 			delete(i, "power")
