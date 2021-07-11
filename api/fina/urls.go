@@ -1,6 +1,8 @@
 package fina
 
-import "github.com/gin-gonic/gin"
+import (
+	"github.com/gin-gonic/gin"
+)
 
 func GetFina(c *gin.Context) {
 	code, ok := c.GetQuery("code")

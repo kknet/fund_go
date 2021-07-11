@@ -13,22 +13,3 @@ type RankOpt struct {
 	Sorted     bool //排序
 	Page       int64
 }
-
-// SearchOpt 搜索
-type SearchOpt struct {
-	Input string
-}
-
-// NewOptByCodes 根据代码列表初始化
-func NewOptByCodes(codes []string) *CListOpt {
-	return &CListOpt{
-		Codes: codes,
-	}
-}
-
-//func NewOptBySearch(search string, marketType string) *CListOpt {
-//	return &CListOpt{
-//		Search:     search,
-//		MarketType: marketType,
-//	}
-//}

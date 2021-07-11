@@ -12,12 +12,11 @@ import (
 
 var json = jsoniter.ConfigCompatibleWithStandardLibrary
 
-var IndustryCount int
+var industryCount int
 
-// MyChan 全局通道
 var MyChan = getGlobalChan()
 
-// 将MyChan设置为全局通道
+// 初始化全局通道
 func getGlobalChan() chan string {
 	var ch chan string
 	var chanOnceManager sync.Once
@@ -112,7 +111,8 @@ func getEastMoney(marketType string, page int) {
 		if err != nil {
 			log.Println("下载股票数据发生错误，", err.Error())
 
-			fmt.Println("正在重试...")
+			fmt.Println("3秒后重试...")
+			time.Sleep(time.Second * 3)
 			request = common.NewGetRequest(url)
 			continue
 		}
@@ -123,12 +123,12 @@ func getEastMoney(marketType string, page int) {
 		UpdateMongo(data, marketType)
 
 		if marketType == "CN" {
-			IndustryCount++
 			// 间隔更新行业数据
-			if IndustryCount >= 6 {
+			if industryCount >= 5 {
 				go CalIndustry()
-				IndustryCount = 0
+				industryCount = 0
 			}
+			industryCount++
 		}
 		MyChan <- marketType
 

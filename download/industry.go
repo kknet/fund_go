@@ -82,6 +82,7 @@ func UpdateBasic() {
 	}
 }
 
+// CalIndustry 聚合计算板块数据
 func CalIndustry() {
 	var results []bson.M
 

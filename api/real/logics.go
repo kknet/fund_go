@@ -21,19 +21,17 @@ var ctx = context.Background()
 func GetStockList(codes []string) []bson.M {
 	var results []bson.M
 	var data []bson.M
+	options := bson.M{"c": 0, "buy": 0, "sell": 0, "_id": 0}
 
 	for i := range download.CollDict {
 		var items []bson.M
-		_ = download.CollDict[i].Find(ctx, bson.M{"_id": bson.M{"$in": codes}}).All(&items)
+		_ = download.CollDict[i].Find(ctx, bson.M{"_id": bson.M{"$in": codes}}).Select(options).All(&items)
 		data = append(data, items...)
 	}
 
 	for _, c := range codes {
 		for _, item := range data {
-			if c == item["_id"] {
-				// 删除临时数据
-				delete(item, "_id")
-				delete(item, "c")
+			if c == item["code"] {
 				// 添加行业数据
 				for _, ids := range []string{"sw", "industry", "area"} {
 					sw, ok := item[ids].(string)
@@ -59,7 +57,6 @@ func AddSimpleMinute(items bson.M) {
 	body, _ := common.NewGetRequest(url + items["cid"].(string)).Do()
 	total := json.Get(body, "data", "trendsTotal").ToInt()
 	preClose := json.Get(body, "data", "preClose").ToFloat32()
-	timestamp := json.Get(body, "data", "time").ToInt()
 	json.Get(body, "data", "trends").ToVal(&info)
 
 	// 间隔
@@ -78,7 +75,7 @@ func AddSimpleMinute(items bson.M) {
 	results = append(results, items["price"].(float64))
 
 	items["chart"] = bson.M{
-		"time": times, "price": results, "close": preClose, "timestamp": timestamp,
+		"time": times, "price": results, "close": preClose,
 	}
 }
 
@@ -139,29 +136,22 @@ func GetMinuteData(code string) interface{} {
 // Search 搜索股票
 func search(input string) []bson.M {
 	var results []bson.M
+	options := bson.M{"code": 1, "name": 1, "type": 1, "marketType": 1, "price": 1, "pct_chg": 1, "amount": 1}
 
-	for _, marketType := range []string{"CN", "HK", "US"} {
+	for _, marketType := range []string{"CN", "HK", "US", "Index"} {
 		var temp []bson.M
 		// 正则匹配 不区分大小写
 		_ = download.CollDict[marketType].Find(ctx, bson.M{"$or": bson.A{
 			bson.M{"_id": bson.M{"$regex": input, "$options": "i"}},
 			bson.M{"name": bson.M{"$regex": input, "$options": "i"}},
 		},
-		}).Sort("-amount").Limit(10).All(&temp)
+		}).Sort("-amount").Select(options).Limit(10).All(&temp)
 		results = append(results, temp...)
 
 		if len(results) >= 10 {
 			return results[0:10]
 		}
 	}
-	var temp []bson.M
-	_ = download.CollDict["Index"].Find(ctx, bson.M{"$or": bson.A{
-		bson.M{"_id": bson.M{"$regex": input, "$options": "i"}},
-		bson.M{"name": bson.M{"$regex": input, "$options": "i"}},
-	},
-	}).Limit(10).All(&temp)
-	results = append(results, temp...)
-
 	if len(results) >= 10 {
 		return results[0:10]
 	}
@@ -172,12 +162,13 @@ func search(input string) []bson.M {
 func getRank(opt *common.RankOpt) []bson.M {
 	var results []bson.M
 	var size int64 = 15
+	options := bson.M{"c": 0, "buy": 0, "sell": 0, "_id": 0}
 
-	sortName := download.Expression(!opt.Sorted, "-"+opt.SortName, opt.SortName).(string)
-
-	_ = download.CollDict[opt.MarketType].Find(ctx, bson.M{}).
-		Sort(sortName).Skip(size * (opt.Page - 1)).Limit(size).All(&results)
-
+	if !opt.Sorted {
+		opt.SortName = "-" + opt.SortName
+	}
+	_ = download.CollDict[opt.MarketType].Find(ctx, bson.M{}).Sort(opt.SortName).Skip(size * (opt.Page - 1)).
+		Limit(size).Select(options).All(&results)
 	return results
 }
 

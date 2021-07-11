@@ -88,7 +88,7 @@ func GetRank(c *gin.Context) {
 	}
 	//page
 	page := c.DefaultQuery("page", "1")
-	opt.Page, _ = strconv.ParseInt(page, 8, 8)
+	opt.Page, _ = strconv.ParseInt(page, 8, 64)
 
 	data := getRank(opt)
 	// 可指定chart, 获取简略图表数据
