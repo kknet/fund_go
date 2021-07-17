@@ -1,6 +1,7 @@
 package real
 
 import (
+	"fmt"
 	"fund_go2/common"
 	"fund_go2/download"
 	"github.com/gin-gonic/gin"
@@ -130,6 +131,8 @@ func GetMarket(c *gin.Context) {
 		_ = download.CollDict["Index"].Find(ctx, bson.M{"type": "industry"}).All(&industry)
 		_ = download.CollDict["Index"].Find(ctx, bson.M{"type": "sw"}).All(&sw)
 		_ = download.CollDict["Index"].Find(ctx, bson.M{"type": "area"}).All(&area)
+
+		fmt.Println(industry)
 
 		c.JSON(200, gin.H{
 			"status": true, "data": bson.M{

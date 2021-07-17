@@ -172,13 +172,14 @@ func search(input string) []bson.M {
 func getRank(opt *common.RankOpt) []bson.M {
 	var results []bson.M
 	var size int64 = 15
-	options := bson.M{"c": 0, "buy": 0, "sell": 0, "_id": 0}
+	options := bson.M{"_id": 0, "sw": 0, "sw_code": 0, "industry": 0, "area": 0}
 
 	if !opt.Sorted {
 		opt.SortName = "-" + opt.SortName
 	}
-	_ = download.CollDict[opt.MarketType].Find(ctx, bson.M{}).Sort(opt.SortName).Skip(size * (opt.Page - 1)).
-		Limit(size).Select(options).All(&results)
+	_ = download.CollDict[opt.MarketType].Find(ctx, bson.M{"vol": bson.M{"$gt": 0}}).
+		Sort(opt.SortName).Skip(size * (opt.Page - 1)).Limit(size).Select(options).All(&results)
+
 	return results
 }
 

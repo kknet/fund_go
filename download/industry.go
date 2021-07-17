@@ -87,8 +87,8 @@ func CalIndustry() {
 			bson.D{{"$match", bson.M{idsName: bson.M{"$nin": bson.A{"NaN", nil, "null", math.NaN()}}, "vol": bson.M{"$gt": 0}}}},
 			bson.D{{"$sort", bson.M{"pct_chg": -1}}},
 			bson.D{{"$group", bson.M{
-				"_id":         "$" + idsName,
-				"code":        bson.M{"$first": "$sw_code"},
+				"_id": "$" + idsName,
+				//"code":        bson.M{"$first": "$sw_code"},
 				"max_pct":     bson.M{"$first": "$pct_chg"},
 				"领涨股":         bson.M{"$first": "$name"},
 				"main_net":    bson.M{"$sum": "$main_net"},
@@ -107,17 +107,18 @@ func CalIndustry() {
 		}
 		for _, i := range results {
 			i["name"] = i["_id"]
+			i["_id"] = idsName + i["name"].(string)
 			i["type"] = idsName
+
 			i["tr"] = float64(i["vol"].(int32)) / i["float_share"].(float64) * 10000
 			i["pct_chg"] = i["power"].(float64) / i["mc"].(float64)
 
-			delete(i, "_id")
 			delete(i, "power")
 			delete(i, "float_share")
 		}
 
 		for _, i := range results {
-			_, err = CollDict["Index"].UpsertId(ctx, idsName+i["name"].(string), i)
+			_, err = CollDict["Index"].UpsertId(ctx, i["_id"], i)
 			if err != nil {
 				log.Println(err)
 			}

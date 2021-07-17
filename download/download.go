@@ -8,7 +8,6 @@ import (
 	jsoniter "github.com/json-iterator/go"
 	"io/ioutil"
 	"log"
-	"math"
 	"net/http"
 	"strings"
 	"sync"
@@ -71,9 +70,7 @@ func calData(df dataframe.DataFrame, marketType string) dataframe.DataFrame {
 
 			var tr, mc, fmc float64
 			if value[3] > 0 {
-				tr = value[1] / value[3] * 100
-			} else {
-				tr = math.NaN()
+				tr = value[1] / value[3] * 10000
 			}
 			mc = value[0] * value[2]
 			fmc = value[0] * value[3]
@@ -124,8 +121,7 @@ var proName = map[string]string{
 	"f2": "price", "f3": "pct_chg", "f5": "vol", "f6": "amount", "f15": "high", "f16": "low",
 	"f10": "vr", "f33": "wb", "f34": "buy", "f35": "sell",
 	"f22": "pct_rate", "f11": "pct5min", "f24": "pct60day", "f25": "pct_year",
-	"f62": "main_net",
-	"f66": "main_huge", "f72": "main_big", "f78": "main_mid", "f84": "main_small", "f184": "main_pct",
+	"f62": "main_net", "f66": "main_huge", "f72": "main_big", "f78": "main_mid", "f84": "main_small",
 }
 
 // 下载数据
@@ -169,6 +165,7 @@ func getEastMoney(marketType string, page int) {
 		}
 
 		df = calData(df, marketType)
+		UpdateMongo(df.Maps(), marketType)
 
 		if marketType == "CN" {
 			// 间隔更新行业数据
