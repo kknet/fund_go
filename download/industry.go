@@ -125,3 +125,7 @@ func CalIndustry() {
 		}
 	}
 }
+
+// CalMainNetRank 计算主力净流入排名
+func CalMainNetRank() {
+}

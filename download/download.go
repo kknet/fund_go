@@ -31,8 +31,8 @@ func getGlobalChan() chan string {
 // 计算指标
 func calData(df dataframe.DataFrame, marketType string) dataframe.DataFrame {
 
-	// 价格大于0
-	df = df.Filter(dataframe.F{Colname: "price", Comparator: series.Greater, Comparando: 0})
+	// 成交量
+	df = df.Filter(dataframe.F{Colname: "vol", Comparator: series.Greater, Comparando: 0})
 
 	//基本信息
 	basicCol := df.Col("code")
@@ -47,7 +47,7 @@ func calData(df dataframe.DataFrame, marketType string) dataframe.DataFrame {
 				Type = "stock"
 				code += Expression(code[0] == '6', ".SH", ".SZ").(string)
 			case "Index":
-				Type = "Index"
+				Type = "index"
 				code += Expression(code[0] == '0', ".SH", ".SZ").(string)
 			case "HK", "US":
 				Type = "stock"
@@ -95,6 +95,21 @@ func calData(df dataframe.DataFrame, marketType string) dataframe.DataFrame {
 	df = df.Mutate(net)
 
 	// main_net 排行
+	if marketType != "US" {
+		indexes := make([]int, df.Nrow())
+		for i := range indexes {
+			indexes[i] = i + 1
+		}
+		index := series.Ints(indexes)
+
+		for _, col := range []string{"main_net", "3day_main_net", "5day_main_net", "10day_main_net"} {
+			df = df.Arrange(dataframe.RevSort(col))
+			index.Name = col + "_rank"
+			df = df.Mutate(index)
+		}
+	} else {
+		df = df.Drop([]string{"main_net", "3day_main_net", "5day_main_net", "10day_main_net"})
+	}
 
 	df = df.Drop([]string{"buy", "sell"})
 	return df
@@ -125,8 +140,8 @@ var proName = map[string]string{
 }
 
 // 下载数据
-func getEastMoney(marketType string, page int) {
-	url := fmt.Sprintf("https://push2.eastmoney.com/api/qt/clist/get?po=1&fid=f6&pz=2500&np=1&fltt=2&pn=%d&fs=%s&fields=", page, fs[marketType])
+func getEastMoney(marketType string) {
+	url := fmt.Sprintf("https://push2.eastmoney.com/api/qt/clist/get?po=1&fid=f6&pz=7500&np=1&fltt=2&pn=1&fs=%s&fields=", fs[marketType])
 	// 定时更新计数器
 	count := 10
 	client := &http.Client{}
@@ -186,11 +201,8 @@ func getEastMoney(marketType string, page int) {
 
 // GoDownload 下载函数
 func GoDownload() {
-	go getEastMoney("CN", 1)
-	go getEastMoney("CN", 2)
-	go getEastMoney("Index", 1)
-	go getEastMoney("HK", 1)
-	go getEastMoney("US", 1)
-	go getEastMoney("US", 2)
-	go getEastMoney("US", 3)
+	go getEastMoney("CN")
+	go getEastMoney("Index")
+	go getEastMoney("HK")
+	go getEastMoney("US")
 }

@@ -23,10 +23,11 @@ var ctx = context.Background()
 func GetStockList(codes []string) []bson.M {
 	var results []bson.M
 	var data []bson.M
+	options := bson.M{"adj_factor": 0, "trade_date": 0, "_id": 0}
 
 	for i := range download.CollDict {
 		var items []bson.M
-		_ = download.CollDict[i].Find(ctx, bson.M{"_id": bson.M{"$in": codes}}).All(&items)
+		_ = download.CollDict[i].Find(ctx, bson.M{"_id": bson.M{"$in": codes}}).Select(options).All(&items)
 		data = append(data, items...)
 	}
 
@@ -172,13 +173,12 @@ func search(input string) []bson.M {
 func getRank(opt *common.RankOpt) []bson.M {
 	var results []bson.M
 	var size int64 = 15
-	options := bson.M{"_id": 0, "sw": 0, "sw_code": 0, "industry": 0, "area": 0}
 
 	if !opt.Sorted {
 		opt.SortName = "-" + opt.SortName
 	}
-	_ = download.CollDict[opt.MarketType].Find(ctx, bson.M{"vol": bson.M{"$gt": 0}}).
-		Sort(opt.SortName).Skip(size * (opt.Page - 1)).Limit(size).Select(options).All(&results)
+	_ = download.CollDict[opt.MarketType].Find(ctx, bson.M{"price": bson.M{"$gt": 0}}).
+		Sort(opt.SortName).Skip(size * (opt.Page - 1)).Limit(size).All(&results)
 
 	return results
 }
