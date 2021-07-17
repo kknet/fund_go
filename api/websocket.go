@@ -16,6 +16,7 @@ const (
 	OVERTIME = time.Second * 5 // 连接超时
 )
 
+// 升级协议
 var upGrader = websocket.Upgrader{
 	CheckOrigin: func(r *http.Request) bool {
 		return true
@@ -39,16 +40,27 @@ func connect(c *gin.Context) *websocket.Conn {
 // ConnectCList 自选表连接
 func ConnectCList(c *gin.Context) {
 	ws := connect(c)
-	//设置超时
+	// 设置超时
 	err := ws.SetReadDeadline(time.Now().Add(OVERTIME))
-	//读取代码
-	_, msg, err := ws.ReadMessage()
 	if err != nil {
 		_ = ws.WriteJSON(bson.M{"msg": "读取代码超时", "status": false})
 		return
 	}
-	codes := strings.Split(string(msg), ",")
-	AddToConnList(ws, codes, "clist")
+	// 读取代码
+	msg := map[string]string{}
+	err = ws.ReadJSON(&msg)
+	if err != nil {
+		_ = ws.WriteJSON(bson.M{"msg": "参数读取错误", "status": false})
+		return
+	}
+	code, ok := msg["code"]
+	if !ok {
+		_ = ws.WriteJSON(bson.M{"msg": "必须指定code参数,示例: 000001.SZ,600036.SH", "status": false})
+		return
+	} else {
+		codes := strings.Split(code, ",")
+		AddToConnList(ws, codes, "clist")
+	}
 }
 
 // ConnectItems 详情页连接
@@ -56,17 +68,26 @@ func ConnectItems(c *gin.Context) {
 	ws := connect(c)
 	//设置超时
 	err := ws.SetReadDeadline(time.Now().Add(OVERTIME))
-	//读取代码
-	_, msg, err := ws.ReadMessage()
 	if err != nil {
 		_ = ws.WriteJSON(bson.M{"msg": "读取代码超时", "status": false})
 		return
 	}
+	// 读取代码
+	msg := map[string]string{}
+	err = ws.ReadJSON(&msg)
+	if err != nil {
+		_ = ws.WriteJSON(bson.M{"msg": "参数读取错误", "status": false})
+		return
+	}
+	code, ok := msg["code"]
+	if !ok {
+		_ = ws.WriteJSON(bson.M{"msg": "必须指定code参数,示例: 000001.SZ", "status": false})
+		return
+	}
 	// 检查代码
-	codes := []string{string(msg)}
-	check := real.GetStockList(codes)
+	check := real.GetStockList([]string{code})
 	if len(check) > 0 {
-		AddToConnList(ws, codes, "items")
+		AddToConnList(ws, []string{code}, "items")
 	} else {
 		_ = ws.WriteJSON(bson.M{"msg": "代码不存在", "status": false})
 	}
@@ -108,17 +129,14 @@ func SendItems() {
 		// 获取新数据
 		newData := real.GetStockList(c.codes)[0]
 
-		results := make(map[string]interface{})
-
 		// 有更新
 		if newData["vol"] != c.data[0]["vol"] {
 			c.data[0] = newData
 
 			group := sync.WaitGroup{}
-			group.Add(3)
-
+			group.Add(2)
 			// 详情
-			results["items"] = newData
+			results := bson.M{"items": newData}
 			// 盘口明细
 			go func() {
 				if newData["marketType"] == "CN" {
@@ -131,19 +149,11 @@ func SendItems() {
 				results["ticks"], _ = real.GetRealtimeTicks(c.codes[0])
 				group.Done()
 			}()
-			// 分时图
-			go func() {
-				if newData["pct_chg"] != c.data[0]["pct_chg"] {
-					results["minute"] = real.GetMinuteData(c.codes[0])
-				}
-				group.Done()
-			}()
 			group.Wait()
 
 			c.data[0] = newData
 			// 写入
 			err = c.Conn.WriteJSON(results)
-			// 错误 关闭连接
 			if err != nil {
 				Close(c)
 				break

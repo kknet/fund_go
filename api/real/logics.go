@@ -9,6 +9,8 @@ import (
 	"github.com/go-gota/gota/series"
 	jsoniter "github.com/json-iterator/go"
 	"go.mongodb.org/mongo-driver/bson"
+	"io/ioutil"
+	"net/http"
 	"strconv"
 	"strings"
 )
@@ -21,24 +23,25 @@ var ctx = context.Background()
 func GetStockList(codes []string) []bson.M {
 	var results []bson.M
 	var data []bson.M
-	options := bson.M{"c": 0, "buy": 0, "sell": 0, "_id": 0}
 
 	for i := range download.CollDict {
 		var items []bson.M
-		_ = download.CollDict[i].Find(ctx, bson.M{"_id": bson.M{"$in": codes}}).Select(options).All(&items)
+		_ = download.CollDict[i].Find(ctx, bson.M{"_id": bson.M{"$in": codes}}).All(&items)
 		data = append(data, items...)
 	}
 
 	for _, c := range codes {
 		for _, item := range data {
 			if c == item["code"] {
-				// 添加行业数据
-				for _, ids := range []string{"sw", "industry", "area"} {
-					sw, ok := item[ids].(string)
-					if ok {
-						var info bson.M
-						_ = download.CollDict["Index"].Find(ctx, bson.M{"name": sw}).One(&info)
-						item[ids] = info
+				if len(codes) == 1 {
+					// 添加行业数据
+					for _, ids := range []string{"sw", "industry", "area"} {
+						sw, ok := item[ids].(string)
+						if ok {
+							var info bson.M
+							_ = download.CollDict["Index"].Find(ctx, bson.M{"name": sw}).One(&info)
+							item[ids] = info
+						}
 					}
 				}
 				results = append(results, item)
@@ -54,7 +57,10 @@ func AddSimpleMinute(items bson.M) {
 	var info []string
 	url := "https://push2.eastmoney.com/api/qt/stock/trends2/get?fields1=f1,f5,f8,f10,f11&fields2=f53&iscr=0&secid="
 
-	body, _ := common.NewGetRequest(url + items["cid"].(string)).Do()
+	res, _ := http.Get(url + items["cid"].(string))
+	body, _ := ioutil.ReadAll(res.Body)
+	defer res.Body.Close()
+
 	total := json.Get(body, "data", "trendsTotal").ToInt()
 	preClose := json.Get(body, "data", "preClose").ToFloat32()
 	json.Get(body, "data", "trends").ToVal(&info)
@@ -82,7 +88,9 @@ func AddSimpleMinute(items bson.M) {
 // Add60day 添加60日行情
 func Add60day(items bson.M) {
 	url := "https://push2his.eastmoney.com/api/qt/stock/kline/get?fields1=f1,f6&fields2=f51,f53&klt=101&fqt=0&end=20500101&lmt=60&secid="
-	body, _ := common.NewGetRequest(url + items["cid"].(string)).Do()
+	res, _ := http.Get(url + items["cid"].(string))
+	body, _ := ioutil.ReadAll(res.Body)
+	defer res.Body.Close()
 
 	var info []string
 	preClose := json.Get(body, "data", "preKPrice").ToFloat32()
@@ -102,7 +110,9 @@ func GetMinuteData(code string) interface{} {
 		return errors.New("该代码不存在")
 	}
 	url := "https://push2.eastmoney.com/api/qt/stock/trends2/get?fields1=f1,f5,f8&fields2=f51,f53,f56,f57,f58&iscr=0&secid="
-	body, _ := common.NewGetRequest(url + cid[0]["cid"].(string)).Do()
+	res, _ := http.Get(url + cid[0]["cid"].(string))
+	body, _ := ioutil.ReadAll(res.Body)
+	defer res.Body.Close()
 
 	var info []string
 	json.Get(body, "data", "trends").ToVal(&info)
@@ -136,7 +146,7 @@ func GetMinuteData(code string) interface{} {
 // Search 搜索股票
 func search(input string) []bson.M {
 	var results []bson.M
-	options := bson.M{"code": 1, "name": 1, "type": 1, "marketType": 1, "price": 1, "pct_chg": 1, "amount": 1}
+	options := bson.M{"code": 1, "name": 1, "type": 1, "marketType": 1, "price": 1, "pct_chg": 1}
 
 	for _, marketType := range []string{"CN", "HK", "US", "Index"} {
 		var temp []bson.M
@@ -179,11 +189,9 @@ func PanKou(code string) bson.M {
 	if err != nil {
 		return bson.M{"msg": "代码格式错误"}
 	}
-	url := "https://stock.xueqiu.com/v5/stock/realtime/pankou.json?&symbol=" + code
-	body, err := common.NewGetRequest(url).Do()
-	if err != nil {
-		panic(err)
-	}
+	res, _ := http.Get("https://stock.xueqiu.com/v5/stock/realtime/pankou.json?&symbol=" + code)
+	body, _ := ioutil.ReadAll(res.Body)
+	defer res.Body.Close()
 	str := json.Get(body, "data").ToString()
 	// json解析
 	var data bson.M
@@ -199,10 +207,13 @@ func GetRealtimeTicks(code string) (interface{}, error) {
 	}
 
 	url := "https://push2.eastmoney.com/api/qt/stock/details/get?fields1=f1&fields2=f51,f52,f53,f55&pos=-50&secid="
-	body, err := common.NewGetRequest(url + cid[0]["cid"].(string)).Do()
+	res, err := http.Get(url + cid[0]["cid"].(string))
 	if err != nil {
 		return nil, errors.New("请求发生错误")
 	}
+	body, _ := ioutil.ReadAll(res.Body)
+	defer res.Body.Close()
+
 	var info []string
 	json.Get(body, "data", "details").ToVal(&info)
 
@@ -273,7 +284,9 @@ func getNumbers(marketType string) bson.M {
 // GetNorthFlow 北向资金流向
 func GetNorthFlow() interface{} {
 	url := "https://push2.eastmoney.com/api/qt/kamt.rtmin/get?fields1=f1,f3&fields2=f52,f54,f56"
-	body, _ := common.NewGetRequest(url).Do()
+	res, _ := http.Get(url)
+	body, _ := ioutil.ReadAll(res.Body)
+	defer res.Body.Close()
 
 	var str []string
 	json.Get(body, "data", "s2n").ToVal(&str)
@@ -289,7 +302,9 @@ func GetNorthFlow() interface{} {
 // GetMainNetFlow 获取大盘主力资金流向
 func GetMainNetFlow() interface{} {
 	url := "https://push2.eastmoney.com/api/qt/stock/fflow/kline/get?lmt=0&klt=1&fields1=f1,f2,f3&fields2=f51,f52,f53,f54,f55,f56&secid=1.000001&secid2=0.399001"
-	body, _ := common.NewGetRequest(url).Do()
+	res, _ := http.Get(url)
+	body, _ := ioutil.ReadAll(res.Body)
+	defer res.Body.Close()
 
 	var str []string
 	json.Get(body, "data", "klines").ToVal(&str)

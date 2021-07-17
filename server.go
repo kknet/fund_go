@@ -65,7 +65,7 @@ func main() {
 	})
 
 	// 启动
-	err := r.Run("localhost:10888")
+	err := r.Run("0.0.0.0:10888")
 	if err != nil {
 		panic(err)
 	}

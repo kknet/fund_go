@@ -7,6 +7,7 @@ import (
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/mongo"
 	"log"
+	"math"
 	"sync"
 	"xorm.io/xorm"
 )
@@ -15,6 +16,15 @@ var ctx = context.Background()
 
 var KlineDB = ConnectDB()
 var CollDict = InitMongo()
+
+// Expression 自定义三元表达式
+func Expression(b bool, true interface{}, false interface{}) interface{} {
+	if b {
+		return true
+	} else {
+		return false
+	}
+}
 
 // ConnectDB 连接数据库
 func ConnectDB() *xorm.Engine {
@@ -42,21 +52,17 @@ func InitMongo() map[string]*qmgo.Collection {
 	return collDict
 }
 
-func UpdateMongo(items []Stock, marketType string) {
+func UpdateMongo(items []map[string]interface{}, marketType string) {
 	group := sync.WaitGroup{}
 	group.Add(3)
 
-	myFunc := func(s []Stock) {
+	myFunc := func(s []map[string]interface{}) {
 		myBulk := CollDict[marketType].Bulk()
 
 		// 初始化事务
 		for i := range s {
-			// 合法性
-			if marketType != "Index" && s[i].TotalShare <= 0 {
-				continue
-			}
-			myBulk = myBulk.UpdateId(s[i].Code, bson.M{"$set": s[i]})
-			//myBulk = myBulk.UpsertId(s[i].Code, s[i])
+			myBulk = myBulk.UpdateId(s[i]["code"], bson.M{"$set": s[i]})
+			//myBulk = myBulk.UpsertId(s[i]["code"], s[i])
 		}
 		_, err := myBulk.Run(ctx)
 		if err != nil {
@@ -71,17 +77,6 @@ func UpdateMongo(items []Stock, marketType string) {
 	group.Wait()
 }
 
-// UpdateBasic 更新地区 申万行业 板块
-func UpdateBasic() {
-	info, _ := KlineDB.QueryInterface("select ts_code,industry,sw,sw_code,area from stock")
-
-	for _, i := range info {
-		tsCode := i["ts_code"]
-		delete(i, "ts_code")
-		_ = CollDict["CN"].UpdateId(ctx, tsCode, bson.M{"$set": i})
-	}
-}
-
 // CalIndustry 聚合计算板块数据
 func CalIndustry() {
 	var results []bson.M
@@ -89,16 +84,14 @@ func CalIndustry() {
 	for _, idsName := range []string{"sw", "industry", "area"} {
 		err := CollDict["CN"].Aggregate(ctx, mongo.Pipeline{
 			// 去掉停牌
-			bson.D{{"$match", bson.M{idsName: bson.M{"$nin": bson.A{"NaN", nil, "null"}}, "vol": bson.M{"$gt": 0}}}},
+			bson.D{{"$match", bson.M{idsName: bson.M{"$nin": bson.A{"NaN", nil, "null", math.NaN()}}, "vol": bson.M{"$gt": 0}}}},
 			bson.D{{"$sort", bson.M{"pct_chg": -1}}},
 			bson.D{{"$group", bson.M{
 				"_id":         "$" + idsName,
 				"code":        bson.M{"$first": "$sw_code"},
 				"max_pct":     bson.M{"$first": "$pct_chg"},
 				"领涨股":         bson.M{"$first": "$name"},
-				"count":       bson.M{"$sum": 1},
-				"main_in":     bson.M{"$sum": "$main_in"},
-				"main_out":    bson.M{"$sum": "$main_out"},
+				"main_net":    bson.M{"$sum": "$main_net"},
 				"net":         bson.M{"$sum": "$net"},
 				"vol":         bson.M{"$sum": "$vol"},
 				"amount":      bson.M{"$sum": "$amount"},
@@ -115,10 +108,8 @@ func CalIndustry() {
 		for _, i := range results {
 			i["name"] = i["_id"]
 			i["type"] = idsName
-			i["tr"] = i["vol"].(float64) / i["float_share"].(float64) * 10000
+			i["tr"] = float64(i["vol"].(int32)) / i["float_share"].(float64) * 10000
 			i["pct_chg"] = i["power"].(float64) / i["mc"].(float64)
-			i["main_net"] = i["main_in"].(float64) + i["main_out"].(float64)
-			i["main_pct"] = i["main_net"].(float64) / (i["main_in"].(float64) - i["main_out"].(float64)) * 100
 
 			delete(i, "_id")
 			delete(i, "power")

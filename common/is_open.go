@@ -18,7 +18,7 @@ func IsOpen(marketType string) bool {
 			} else if hour == 11 && minute < 30 {
 				return true
 			}
-			//下午
+			// 下午
 			if 13 <= hour && hour < 15 {
 				return true
 			}
