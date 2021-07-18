@@ -7,7 +7,6 @@ import (
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/mongo"
 	"log"
-	"math"
 	"sync"
 	"xorm.io/xorm"
 )
@@ -84,7 +83,7 @@ func CalIndustry() {
 	for _, idsName := range []string{"sw", "industry", "area"} {
 		err := CollDict["CN"].Aggregate(ctx, mongo.Pipeline{
 			// 去掉停牌
-			bson.D{{"$match", bson.M{idsName: bson.M{"$nin": bson.A{"NaN", nil, "null", math.NaN()}}, "vol": bson.M{"$gt": 0}}}},
+			bson.D{{"$match", bson.M{idsName: bson.M{"$nin": bson.A{"NaN", nil, "null"}}, "vol": bson.M{"$gt": 0}}}},
 			bson.D{{"$sort", bson.M{"pct_chg": -1}}},
 			bson.D{{"$group", bson.M{
 				"_id": "$" + idsName,
@@ -124,8 +123,4 @@ func CalIndustry() {
 			}
 		}
 	}
-}
-
-// CalMainNetRank 计算主力净流入排名
-func CalMainNetRank() {
 }

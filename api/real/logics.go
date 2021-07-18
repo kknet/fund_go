@@ -23,7 +23,7 @@ var ctx = context.Background()
 func GetStockList(codes []string) []bson.M {
 	var results []bson.M
 	var data []bson.M
-	options := bson.M{"adj_factor": 0, "trade_date": 0, "_id": 0}
+	options := bson.M{"adj_factor": 0, "_id": 0}
 
 	for i := range download.CollDict {
 		var items []bson.M
