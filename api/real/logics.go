@@ -19,32 +19,45 @@ import (
 var json = jsoniter.ConfigCompatibleWithStandardLibrary
 var ctx = context.Background()
 
+// query options
+var basicOptions = bson.M{
+	"_id": 0, "cid": 1, "code": 1, "name": 1, "price": 1, "pct_chg": 1,
+	"vol": 1, "amount": 1, "mc": 1, "agg_rank": 1, "net": 1, "main_net": 1, "tr": 1,
+}
+
 // GetStockList 获取多只股票信息
 func GetStockList(codes []string) []bson.M {
 	var results []bson.M
 	var data []bson.M
-	options := bson.M{"adj_factor": 0, "_id": 0}
+
+	var options bson.M
+	if len(codes) > 1 {
+		options = basicOptions
+	} else {
+		options = bson.M{"adj_factor": 0, "_id": 0}
+	}
 
 	for i := range download.CollDict {
 		var items []bson.M
 		_ = download.CollDict[i].Find(ctx, bson.M{"_id": bson.M{"$in": codes}}).Select(options).All(&items)
 		data = append(data, items...)
 	}
-
+	// 添加行业数据
+	if len(data) == 1 {
+		// 添加行业数据
+		for _, ids := range []string{"sw", "industry", "area"} {
+			sw, ok := data[0][ids].(string)
+			if ok {
+				var info bson.M
+				_ = download.CollDict["Index"].Find(ctx, bson.M{"name": sw}).One(&info)
+				data[0][ids] = info
+			}
+		}
+	}
+	// 排序
 	for _, c := range codes {
 		for _, item := range data {
 			if c == item["code"] {
-				if len(codes) == 1 {
-					// 添加行业数据
-					for _, ids := range []string{"sw", "industry", "area"} {
-						sw, ok := item[ids].(string)
-						if ok {
-							var info bson.M
-							_ = download.CollDict["Index"].Find(ctx, bson.M{"name": sw}).One(&info)
-							item[ids] = info
-						}
-					}
-				}
 				results = append(results, item)
 				break
 			}
@@ -147,7 +160,7 @@ func GetMinuteData(code string) interface{} {
 // Search 搜索股票
 func search(input string) []bson.M {
 	var results []bson.M
-	options := bson.M{"code": 1, "name": 1, "type": 1, "marketType": 1, "price": 1, "pct_chg": 1}
+	options := bson.M{"code": 1, "name": 1, "type": 1, "marketType": 1, "price": 1, "pct_chg": 1, "_id": 0, "agg_rank": 1}
 
 	for _, marketType := range []string{"CN", "HK", "US", "Index"} {
 		var temp []bson.M
@@ -174,12 +187,17 @@ func getRank(opt *common.RankOpt) []bson.M {
 	var results []bson.M
 	var size int64 = 15
 
-	if !opt.Sorted {
-		opt.SortName = "-" + opt.SortName
-	}
-	_ = download.CollDict[opt.MarketType].Find(ctx, bson.M{"price": bson.M{"$gt": 0}}).
-		Sort(opt.SortName).Skip(size * (opt.Page - 1)).Limit(size).All(&results)
+	if opt.SortName == "agg_rank" {
+		_ = download.CollDict[opt.MarketType].Find(ctx, bson.M{"vol": bson.M{"$gt": 0}, "agg_rank": bson.M{"$gt": 0}}).
+			Sort(opt.SortName).Select(basicOptions).Skip(size * (opt.Page - 1)).Limit(size).All(&results)
 
+	} else {
+		if !opt.Sorted {
+			opt.SortName = "-" + opt.SortName
+		}
+		_ = download.CollDict[opt.MarketType].Find(ctx, bson.M{"vol": bson.M{"$gt": 0}}).
+			Sort(opt.SortName).Select(basicOptions).Skip(size * (opt.Page - 1)).Limit(size).All(&results)
+	}
 	return results
 }
 

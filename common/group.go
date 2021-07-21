@@ -18,3 +18,13 @@ func GoFunc(data []bson.M, myFunc func(m bson.M)) []bson.M {
 	group.Wait()
 	return data
 }
+
+// JoinMapKeys 连接map的key值
+func JoinMapKeys(maps map[string]string, concatStr string) string {
+	var str string
+	for key, _ := range maps {
+		str += key + concatStr
+	}
+	str = str[:len(str)-1]
+	return str
+}

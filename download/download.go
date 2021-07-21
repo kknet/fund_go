@@ -30,8 +30,6 @@ func getGlobalChan() chan string {
 // 计算指标
 func calData(df dataframe.DataFrame, marketType string) dataframe.DataFrame {
 
-	df = df.Filter(dataframe.F{Colname: "vol", Comparator: series.Greater, Comparando: 0})
-
 	indexes := make([]int, df.Nrow())
 	for i := range indexes {
 		indexes[i] = i + 1
@@ -39,7 +37,6 @@ func calData(df dataframe.DataFrame, marketType string) dataframe.DataFrame {
 	index := series.Ints(indexes)
 
 	for _, col := range df.Names() {
-
 		// cid type marketType
 		if col == "cid" {
 			basic := df.Select([]string{"cid", "code"}).Rapply(func(s series.Series) series.Series {
@@ -72,11 +69,21 @@ func calData(df dataframe.DataFrame, marketType string) dataframe.DataFrame {
 			_ = pct.SetNames("tr", "mc", "fmc")
 			df = df.CBind(pct)
 
-			// 主力净流入排名
-		} else if strings.Contains(col, "main_net") && (marketType == "CN" || marketType == "HK") {
-			df = df.Arrange(dataframe.RevSort(col))
-			index.Name = col + "_rank"
-			df = df.Mutate(index)
+			// 主力净流入
+		} else if col == "huge_in" && (marketType == "CN" || marketType == "HK") {
+			main := df.Select([]string{"huge_in", "huge_out", "big_in", "big_out"}).Rapply(func(s series.Series) series.Series {
+				value := s.Float()
+				var mainHuge, mainBig, mainIn, mainOut, mainNet float64
+				mainHuge = value[0] - value[1]
+				mainBig = value[2] - value[3]
+				mainIn = value[0] + value[2]
+				mainOut = value[1] + value[3]
+				mainNet = mainIn - mainOut
+
+				return series.Floats([]float64{mainHuge, mainBig, mainIn, mainOut, mainNet})
+			})
+			_ = main.SetNames("main_huge", "main_big", "main_in", "main_out", "main_net")
+			df = df.CBind(main).Drop([]string{"huge_in", "huge_out", "big_in", "big_out"})
 		}
 	}
 
@@ -96,12 +103,33 @@ func calData(df dataframe.DataFrame, marketType string) dataframe.DataFrame {
 	})
 	df = df.Mutate(code)
 
+	// 主力净流入排名
+	rankCount := 0
+	for _, col := range df.Names() {
+		if strings.Contains(col, "main_net") && (marketType == "CN" || marketType == "HK") {
+			df = df.Arrange(dataframe.RevSort(col))
+			index.Name = col + "_rank"
+			df = df.Mutate(index)
+			rankCount++
+		}
+	}
+
+	// 平均排名
+	if rankCount >= 4 {
+		row := []string{"main_net_rank", "3day_main_net_rank", "5day_main_net_rank", "10day_main_net_rank"}
+		rank := df.Select(row).Rapply(func(s series.Series) series.Series {
+			return series.Floats(s.Mean())
+		}).Col("X0")
+		rank.Name = "agg_rank"
+		df = df.Mutate(rank)
+	}
+
 	// net
 	net := df.Select([]string{"vol", "amount", "buy", "sell"}).Rapply(func(s series.Series) series.Series {
 		value := s.Float()
-		net := (value[2] - value[3]) * value[1] / value[0]
-
-		return series.Floats([]float64{net})
+		return series.Floats([]float64{
+			(value[2] - value[3]) * value[1] / value[0],
+		})
 	}).Col("X0")
 	net.Name = "net"
 	df = df.Mutate(net).Drop([]string{"buy", "sell"})
@@ -130,7 +158,8 @@ var proName = map[string]string{
 	"f12": "code", "f2": "price", "f3": "pct_chg", "f5": "vol", "f6": "amount",
 	"f10": "vr", "f33": "wb", "f34": "buy", "f35": "sell",
 	"f22": "pct_rate", "f11": "pct5min",
-	"f62": "main_net", "f66": "main_huge", "f72": "main_big", "f78": "main_mid", "f84": "main_small",
+	"f64": "huge_in", "f65": "huge_out", "f70": "big_in", "f71": "big_out",
+	"f78": "main_mid", "f84": "main_small",
 }
 
 // 下载数据
@@ -141,19 +170,12 @@ func getEastMoney(marketType string) {
 	count := 999
 	client := &http.Client{}
 	for {
-		tempUrl = url
 		// 连接参数
-		for i := range proName {
-			tempUrl += i + ","
-		}
+		tempUrl = url + common.JoinMapKeys(proName, ",")
 		if count >= 10 {
-			for i := range basicName {
-				tempUrl += i + ","
-			}
+			tempUrl += "," + common.JoinMapKeys(basicName, ",")
 			count = 0
 		}
-		tempUrl = tempUrl[:len(tempUrl)-1]
-
 		res, err := client.Get(tempUrl)
 		if err != nil {
 			log.Println("下载股票数据发生错误，3秒后重试...", err.Error())
@@ -189,7 +211,7 @@ func getEastMoney(marketType string) {
 		MyChan <- marketType
 
 		for !common.IsOpen(marketType) {
-			count = 10
+			count = 999
 			time.Sleep(time.Millisecond * 500)
 		}
 		time.Sleep(time.Millisecond * 300)

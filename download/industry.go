@@ -8,12 +8,9 @@ import (
 	"go.mongodb.org/mongo-driver/mongo"
 	"log"
 	"sync"
-	"xorm.io/xorm"
 )
 
 var ctx = context.Background()
-
-var KlineDB = ConnectDB()
 var CollDict = InitMongo()
 
 // Expression 自定义三元表达式
@@ -23,16 +20,6 @@ func Expression(b bool, true interface{}, false interface{}) interface{} {
 	} else {
 		return false
 	}
-}
-
-// ConnectDB 连接数据库
-func ConnectDB() *xorm.Engine {
-	connStr := "postgres://postgres:123456@127.0.0.1:5432/kline?sslmode=disable"
-	db, err := xorm.NewEngine("postgres", connStr)
-	if err != nil {
-		panic(err)
-	}
-	return db
 }
 
 func InitMongo() map[string]*qmgo.Collection {
@@ -82,7 +69,6 @@ func CalIndustry() {
 
 	for _, idsName := range []string{"sw", "industry", "area"} {
 		err := CollDict["CN"].Aggregate(ctx, mongo.Pipeline{
-			// 去掉停牌
 			bson.D{{"$match", bson.M{idsName: bson.M{"$nin": bson.A{"NaN", nil, "null"}}, "vol": bson.M{"$gt": 0}}}},
 			bson.D{{"$sort", bson.M{"pct_chg": -1}}},
 			bson.D{{"$group", bson.M{
