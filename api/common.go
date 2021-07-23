@@ -34,10 +34,10 @@ func AddToConnList(ws *websocket.Conn, codes []string, Type string) {
 
 // Ping 检查连接
 func (c *MyConn) Ping() error {
-	// 检查连接
+	// 每分钟ping客户端
 	if time.Since(c.CountDown) > time.Minute {
 		err := c.Conn.WriteJSON(bson.M{"msg": "ping"})
-		// 错误 关闭连接
+		// 关闭连接
 		if err != nil {
 			return err
 		} else {

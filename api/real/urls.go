@@ -23,18 +23,6 @@ func GetChart(c *gin.Context) {
 		c.JSON(200, gin.H{
 			"status": true, "data": data,
 		})
-	case "minute":
-		code, ok := c.GetQuery("code")
-		if ok {
-			data := GetMinuteData(code)
-			c.JSON(200, gin.H{
-				"status": true, "data": data,
-			})
-		} else {
-			c.JSON(200, gin.H{
-				"status": false, "msg": "必须指定code参数",
-			})
-		}
 	default:
 		c.JSON(200, gin.H{
 			"status": false, "msg": "该页面不存在",

@@ -21,8 +21,9 @@ var ctx = context.Background()
 
 // query options
 var basicOptions = bson.M{
-	"_id": 0, "cid": 1, "code": 1, "name": 1, "price": 1, "pct_chg": 1,
-	"vol": 1, "amount": 1, "mc": 1, "agg_rank": 1, "net": 1, "main_net": 1, "tr": 1,
+	"_id": 0, "cid": 1, "code": 1, "name": 1, "type": 1, "marketType": 1,
+	"close": 1, "price": 1, "pct_chg": 1, "vol": 1, "amount": 1, "mc": 1,
+	"agg_rank": 1, "net": 1, "main_net": 1, "tr": 1,
 }
 
 // GetStockList 获取多只股票信息
@@ -30,10 +31,8 @@ func GetStockList(codes []string) []bson.M {
 	var results []bson.M
 	var data []bson.M
 
-	var options bson.M
-	if len(codes) > 1 {
-		options = basicOptions
-	} else {
+	options := basicOptions
+	if len(codes) <= 1 {
 		options = bson.M{"adj_factor": 0, "_id": 0}
 	}
 
@@ -117,59 +116,22 @@ func Add60day(items bson.M) {
 	}
 }
 
-// GetMinuteData 获取分时行情
-func GetMinuteData(code string) interface{} {
-	cid := GetStockList([]string{code})
-	if len(cid) == 0 {
-		return errors.New("该代码不存在")
-	}
-	url := "https://push2.eastmoney.com/api/qt/stock/trends2/get?fields1=f1,f5,f8&fields2=f51,f53,f56,f57,f58&iscr=0&secid="
-	res, _ := http.Get(url + cid[0]["cid"].(string))
-	body, _ := ioutil.ReadAll(res.Body)
-	defer res.Body.Close()
-
-	var info []string
-	json.Get(body, "data", "trends").ToVal(&info)
-	preClose := json.Get(body, "data", "preClose").ToFloat64()
-	df := dataframe.ReadCSV(strings.NewReader("time,price,vol,amount,avg\n" + strings.Join(info, "\n")))
-
-	// 添加color
-	color := make([]int, df.Nrow())
-	for index, i := range df.Col("price").Float() {
-		if i >= preClose {
-			color[index] = 1
-		} else {
-			color[index] = 0
-		}
-		preClose = i
-	}
-	// time切片
-	times := make([]string, df.Nrow())
-	for index, i := range df.Col("time").Records() {
-		items := strings.Split(i, " ")
-		times[index] = items[1]
-	}
-
-	return bson.M{
-		"time": times, "price": df.Col("price").Float(),
-		"vol": df.Col("vol").Float(), "amount": df.Col("amount").Float(),
-		"avg": df.Col("avg").Float(), "color": color,
-	}
-}
-
 // Search 搜索股票
 func search(input string) []bson.M {
 	var results []bson.M
-	options := bson.M{"code": 1, "name": 1, "type": 1, "marketType": 1, "price": 1, "pct_chg": 1, "_id": 0, "agg_rank": 1}
+
+	// 模糊查询
+	char := strings.Split(input, "")
+	matchStr := strings.Join(char, ".*")
 
 	for _, marketType := range []string{"CN", "HK", "US", "Index"} {
 		var temp []bson.M
 		// 正则匹配 不区分大小写
 		_ = download.CollDict[marketType].Find(ctx, bson.M{"$or": bson.A{
-			bson.M{"_id": bson.M{"$regex": input, "$options": "i"}},
-			bson.M{"name": bson.M{"$regex": input, "$options": "i"}},
+			bson.M{"_id": bson.M{"$regex": matchStr, "$options": "i"}},
+			bson.M{"name": bson.M{"$regex": matchStr, "$options": "i"}},
 		},
-		}).Sort("-amount").Select(options).Limit(10).All(&temp)
+		}).Sort("-amount").Select(basicOptions).Limit(10).All(&temp)
 		results = append(results, temp...)
 
 		if len(results) >= 10 {
@@ -188,8 +150,12 @@ func getRank(opt *common.RankOpt) []bson.M {
 	var size int64 = 15
 
 	if opt.SortName == "agg_rank" {
+		myOptions := basicOptions
+		myOptions["3day_main_net"] = 1
+		myOptions["5day_main_net"] = 1
+		myOptions["10day_main_net"] = 1
 		_ = download.CollDict[opt.MarketType].Find(ctx, bson.M{"vol": bson.M{"$gt": 0}, "agg_rank": bson.M{"$gt": 0}}).
-			Sort(opt.SortName).Select(basicOptions).Skip(size * (opt.Page - 1)).Limit(size).All(&results)
+			Sort(opt.SortName).Select(myOptions).Skip(size * (opt.Page - 1)).Limit(size).All(&results)
 
 	} else {
 		if !opt.Sorted {

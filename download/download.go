@@ -43,8 +43,9 @@ func calData(df dataframe.DataFrame, marketType string) dataframe.DataFrame {
 
 				cid := s.Elem(0).String() + "." + s.Elem(1).String()
 				Type := Expression(marketType == "Index", "index", "stock").(string)
+				market := Expression(marketType == "Index", "CN", marketType).(string)
 
-				return series.Strings([]string{cid, marketType, Type})
+				return series.Strings([]string{cid, market, Type})
 			})
 			_ = basic.SetNames("cid", "marketType", "type")
 
@@ -145,7 +146,7 @@ var fs = map[string]string{
 	"US":    "m:105,m:106,m:107",
 }
 
-// 不需要高频更新
+// 低频更新
 var basicName = map[string]string{
 	"f13": "cid", "f14": "name", "f15": "high", "f16": "low", "f17": "open", "f18": "close",
 	"f38": "total_share", "f39": "float_share",
@@ -153,7 +154,7 @@ var basicName = map[string]string{
 	"f23": "pb", "f115": "pe_ttm", "f24": "pct60day", "f25": "pct_year",
 }
 
-// 需要高频更新
+// 高频更新
 var proName = map[string]string{
 	"f12": "code", "f2": "price", "f3": "pct_chg", "f5": "vol", "f6": "amount",
 	"f10": "vr", "f33": "wb", "f34": "buy", "f35": "sell",
@@ -164,7 +165,7 @@ var proName = map[string]string{
 
 // 下载数据
 func getEastMoney(marketType string) {
-	url := "https://push2.eastmoney.com/api/qt/clist/get?po=1&fid=f20&pz=6000&np=1&fltt=2&pn=1&fs=" + fs[marketType] + "&fields="
+	url := "https://push2.eastmoney.com/api/qt/clist/get?po=1&fid=f20&pz=4600&np=1&fltt=2&pn=1&fs=" + fs[marketType] + "&fields="
 	var tempUrl string
 	// 定时更新计数器
 	count := 999
@@ -172,7 +173,7 @@ func getEastMoney(marketType string) {
 	for {
 		// 连接参数
 		tempUrl = url + common.JoinMapKeys(proName, ",")
-		if count >= 10 {
+		if count >= 20 {
 			tempUrl += "," + common.JoinMapKeys(basicName, ",")
 			count = 0
 		}
@@ -203,7 +204,7 @@ func getEastMoney(marketType string) {
 
 		if marketType == "CN" {
 			// 间隔更新行业数据
-			if count%5 == 0 {
+			if count%10 == 0 {
 				go CalIndustry()
 			}
 		}
