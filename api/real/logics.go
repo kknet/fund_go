@@ -67,6 +67,12 @@ func GetStockList(codes []string) []bson.M {
 
 // AddSimpleMinute 添加简略分时行情
 func AddSimpleMinute(items bson.M) {
+	_, ok := items["cid"]
+	if !ok {
+		items["chart"] = bson.M{}
+		return
+	}
+
 	var info []string
 	url := "https://push2.eastmoney.com/api/qt/stock/trends2/get?fields1=f1,f5,f8,f10,f11&fields2=f53&iscr=0&secid="
 

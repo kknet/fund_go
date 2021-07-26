@@ -1,10 +1,12 @@
 package download
 
 import (
+	"fmt"
 	"fund_go2/common"
 	"github.com/go-gota/gota/dataframe"
 	"github.com/go-gota/gota/series"
 	jsoniter "github.com/json-iterator/go"
+	"go.mongodb.org/mongo-driver/bson"
 	"io/ioutil"
 	"log"
 	"net/http"
@@ -15,6 +17,38 @@ import (
 
 var json = jsoniter.ConfigCompatibleWithStandardLibrary
 var MyChan = getGlobalChan()
+
+// MarketStatus 市场状态
+// 盘前交易、交易中、已收盘
+var MarketStatus = map[string]bool{
+	"CN": false, "HK": false, "US": false,
+}
+
+// 参数
+var fs = map[string]string{
+	"Index": "m:1+s:2,m:0+t:5",
+	"CN":    "m:0+t:6,m:0+t:80,m:1+t:2,m:1+t:23",
+	"HK":    "m:116+t:1,m:116+t:2,m:116+t:3,m:116+t:4",
+	"US":    "m:105,m:106,m:107",
+}
+
+// 低频更新
+var basicName = map[string]string{
+	"f13": "cid", "f14": "name", "f15": "high", "f16": "low", "f17": "open", "f18": "close",
+	"f38": "total_share", "f39": "float_share",
+	"f267": "3day_main_net", "f164": "5day_main_net", "f174": "10day_main_net",
+	"f23": "pb", "f115": "pe_ttm",
+	//"f24": "pct60day", "f25": "pct_year",
+}
+
+// 高频更新
+var proName = map[string]string{
+	"f12": "code", "f2": "price", "f3": "pct_chg", "f5": "vol", "f6": "amount",
+	"f10": "vr", "f33": "wb", "f34": "buy", "f35": "sell",
+	//"f22": "pct_rate", "f11": "pct5min",
+	"f64": "huge_in", "f65": "huge_out", "f70": "big_in", "f71": "big_out",
+	"f78": "main_mid", "f84": "main_small",
+}
 
 // 初始化全局通道
 func getGlobalChan() chan string {
@@ -27,7 +61,7 @@ func getGlobalChan() chan string {
 	return ch
 }
 
-// 计算指标
+// 计算股票指标
 func calData(df dataframe.DataFrame, marketType string) dataframe.DataFrame {
 
 	indexes := make([]int, df.Nrow())
@@ -138,48 +172,23 @@ func calData(df dataframe.DataFrame, marketType string) dataframe.DataFrame {
 	return df
 }
 
-// 参数
-var fs = map[string]string{
-	"Index": "m:1+s:2,m:0+t:5",
-	"CN":    "m:0+t:6,m:0+t:80,m:1+t:2,m:1+t:23",
-	"HK":    "m:116+t:1,m:116+t:2,m:116+t:3,m:116+t:4",
-	"US":    "m:105,m:106,m:107",
-}
-
-// 低频更新
-var basicName = map[string]string{
-	"f13": "cid", "f14": "name", "f15": "high", "f16": "low", "f17": "open", "f18": "close",
-	"f38": "total_share", "f39": "float_share",
-	"f267": "3day_main_net", "f164": "5day_main_net", "f174": "10day_main_net",
-	"f23": "pb", "f115": "pe_ttm", "f24": "pct60day", "f25": "pct_year",
-}
-
-// 高频更新
-var proName = map[string]string{
-	"f12": "code", "f2": "price", "f3": "pct_chg", "f5": "vol", "f6": "amount",
-	"f10": "vr", "f33": "wb", "f34": "buy", "f35": "sell",
-	"f22": "pct_rate", "f11": "pct5min",
-	"f64": "huge_in", "f65": "huge_out", "f70": "big_in", "f71": "big_out",
-	"f78": "main_mid", "f84": "main_small",
-}
-
 // 下载数据
 func getEastMoney(marketType string) {
 	url := "https://push2.eastmoney.com/api/qt/clist/get?po=1&fid=f20&pz=4600&np=1&fltt=2&pn=1&fs=" + fs[marketType] + "&fields="
 	var tempUrl string
 	// 定时更新计数器
-	count := 999
+	var count = 99
 	client := &http.Client{}
 	for {
 		// 连接参数
 		tempUrl = url + common.JoinMapKeys(proName, ",")
-		if count >= 20 {
+		if count >= 10 {
 			tempUrl += "," + common.JoinMapKeys(basicName, ",")
 			count = 0
 		}
 		res, err := client.Get(tempUrl)
 		if err != nil {
-			log.Println("下载股票数据发生错误，3秒后重试...", err.Error())
+			log.Println("下载股票数据失败，3秒后重试...", err.Error())
 			time.Sleep(time.Second * 3)
 			continue
 		}
@@ -191,6 +200,7 @@ func getEastMoney(marketType string) {
 			"f12": series.String, "f13": series.String,
 		}))
 
+		// 重命名
 		for _, col := range df.Names() {
 			newName, ok := proName[col]
 			if !ok {
@@ -211,18 +221,61 @@ func getEastMoney(marketType string) {
 		count++
 		MyChan <- marketType
 
-		for !common.IsOpen(marketType) {
+		for MarketStatus[marketType] {
 			count = 999
-			time.Sleep(time.Millisecond * 500)
+			time.Sleep(time.Millisecond * 100)
 		}
 		time.Sleep(time.Millisecond * 300)
 	}
 }
 
-// GoDownload 下载函数
+// 获取市场状态：盘前、交易中、闭市
+func getMarketStatus() {
+	url := "https://xueqiu.com/service/v5/stock/batch/quote?symbol=SH000001,HKHSI,.IXIC"
+	client := &http.Client{}
+	for {
+		res, err := client.Get(url)
+		if err != nil {
+			log.Println("更新市场状态失败，3秒后重试...", err.Error())
+			time.Sleep(time.Second * 3)
+			continue
+		}
+
+		body, _ := ioutil.ReadAll(res.Body)
+		items := json.Get(body, "data", "items").ToString()
+		_ = res.Body.Close()
+
+		// 设置CN，HK，US市场状态
+		for i := 0; i < 3; i++ {
+			market := json.Get([]byte(items), i, "market", "region").ToString()
+			statusName := json.Get([]byte(items), i, "market", "status").ToString()
+			status := Expression(statusName == "交易中", true, false).(bool)
+			fmt.Println(market, statusName, status)
+
+			update := bson.M{"$set": bson.M{"status_name": statusName, "status": status}}
+
+			switch market {
+			case "CN":
+				_, err = CollDict["CN"].UpdateAll(ctx, bson.M{}, update)
+				_, _ = CollDict["Index"].UpdateAll(ctx, bson.M{}, update)
+				if err != nil {
+					log.Println(err)
+				}
+			case "HK", "US":
+				_, _ = CollDict[market].UpdateAll(ctx, bson.M{}, update)
+			}
+		}
+		// 每3秒更新
+		time.Sleep(time.Second * 3)
+	}
+}
+
+// GoDownload 主函数
 func GoDownload() {
 	go getEastMoney("CN")
 	go getEastMoney("Index")
 	go getEastMoney("HK")
 	go getEastMoney("US")
+
+	go getMarketStatus()
 }

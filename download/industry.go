@@ -48,7 +48,6 @@ func UpdateMongo(items []map[string]interface{}, marketType string) {
 		// 初始化事务
 		for i := range s {
 			myBulk = myBulk.UpdateId(s[i]["code"], bson.M{"$set": s[i]})
-			//myBulk = myBulk.UpsertId(s[i]["code"], s[i])
 		}
 		_, err := myBulk.Run(ctx)
 		if err != nil {
@@ -68,22 +67,30 @@ func CalIndustry() {
 	var results []bson.M
 
 	for _, idsName := range []string{"sw", "industry", "area"} {
+		var code string
+		if idsName == "sw" {
+			code = "$sw_code"
+		} else {
+			code = "$" + idsName
+		}
 		err := CollDict["CN"].Aggregate(ctx, mongo.Pipeline{
-			bson.D{{"$match", bson.M{idsName: bson.M{"$nin": bson.A{"NaN", nil, "null"}}, "vol": bson.M{"$gt": 0}}}},
+			bson.D{{"$match", bson.M{
+				idsName: bson.M{"$nin": bson.A{"NaN", "null", nil}}, "vol": bson.M{"$gt": 0},
+			}}},
 			bson.D{{"$sort", bson.M{"pct_chg": -1}}},
 			bson.D{{"$group", bson.M{
-				"_id": "$" + idsName,
-				//"code":        bson.M{"$first": "$sw_code"},
+				"_id":         code,
+				"code":        bson.M{"$first": "$sw_code"},
+				"name":        bson.M{"$first": "$" + idsName},
 				"max_pct":     bson.M{"$first": "$pct_chg"},
 				"领涨股":         bson.M{"$first": "$name"},
 				"main_net":    bson.M{"$sum": "$main_net"},
 				"net":         bson.M{"$sum": "$net"},
 				"vol":         bson.M{"$sum": "$vol"},
 				"amount":      bson.M{"$sum": "$amount"},
-				"mc":          bson.M{"$sum": "$mc"},
 				"fmc":         bson.M{"$sum": "$fmc"},
 				"float_share": bson.M{"$sum": "$float_share"},
-				"power":       bson.M{"$sum": bson.M{"$multiply": bson.A{"$mc", "$pct_chg"}}},
+				"power":       bson.M{"$sum": bson.M{"$multiply": bson.A{"$fmc", "$pct_chg"}}},
 			}}},
 		}).All(&results)
 
@@ -91,12 +98,10 @@ func CalIndustry() {
 			log.Println("CalIndustry错误: ", err)
 		}
 		for _, i := range results {
-			i["name"] = i["_id"]
-			i["_id"] = idsName + i["name"].(string)
 			i["type"] = idsName
-
+			i["marketType"] = "CN"
 			i["tr"] = float64(i["vol"].(int32)) / i["float_share"].(float64) * 10000
-			i["pct_chg"] = i["power"].(float64) / i["mc"].(float64)
+			i["pct_chg"] = i["power"].(float64) / i["fmc"].(float64)
 
 			delete(i, "power")
 			delete(i, "float_share")
