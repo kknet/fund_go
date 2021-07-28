@@ -29,17 +29,21 @@ func GetTopTen() []map[string]interface{} {
 
 // GetPeriodData 获取阶段统计数据
 func GetPeriodData(opt *PeriodOptions) []map[string]interface{} {
+	// 时间
+	var bulk *xorm.Session
+	if opt.period > 0 {
+		bulk = northDB.Table("agg_" + strconv.Itoa(opt.period) + "day")
+	} else {
+		bulk = northDB.Table(opt.tradeDate)
+	}
+
+	//sort
 	orderName := opt.orderName
 	if !opt.order {
 		orderName = "-" + orderName
 	}
 
-	data, err := northDB.
-		Table("agg_" + strconv.Itoa(opt.period) + "day").
-		OrderBy(orderName).
-		Limit(opt.size).
-		QueryInterface()
-
+	data, err := bulk.OrderBy(orderName).Limit(opt.size).QueryInterface()
 	if err != nil {
 		return []map[string]interface{}{}
 	}

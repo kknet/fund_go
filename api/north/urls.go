@@ -14,7 +14,8 @@ func TopTen(c *gin.Context) {
 }
 
 type PeriodOptions struct {
-	period    int
+	tradeDate string // 日期 二选一
+	period    int    // 阶段 二选一
 	orderName string
 	order     bool
 	page      int
@@ -23,31 +24,31 @@ type PeriodOptions struct {
 
 // PeriodData 阶段统计数据
 func PeriodData(c *gin.Context) {
+
+	opt := &PeriodOptions{size: 50}
+
 	periodString, ok := c.GetQuery("period")
-	if !ok {
-		c.JSON(200, gin.H{
-			"status": false, "msg": "必须指定period参数",
-		})
-	}
-	period, err := strconv.Atoi(periodString)
-	if err != nil {
-		c.JSON(200, gin.H{
-			"status": false, "msg": "period参数错误",
-		})
+	// period
+	if ok {
+		period, err := strconv.Atoi(periodString)
+		if err != nil {
+			c.JSON(200, gin.H{
+				"status": false, "msg": "period参数错误",
+			})
+		}
+		opt.period = period
+		opt.orderName = c.DefaultQuery("sort", "values_change")
+
+		// trade_date
+	} else {
+		opt.tradeDate = c.DefaultQuery("trade_date", "20210727")
+		opt.orderName = c.DefaultQuery("sort", "values")
 	}
 
-	opt := &PeriodOptions{
-		period:    period,
-		orderName: c.DefaultQuery("order_name", "values_change"),
-		size:      30,
-	}
-	order := c.DefaultQuery("order", "true")
-	switch order {
+	switch c.DefaultQuery("sorted", "false") {
 	case "1", "True", "true":
 		opt.order = true
 	case "-1", "False", "false":
-		opt.order = false
-	default:
 		opt.order = false
 	}
 
