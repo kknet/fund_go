@@ -46,9 +46,8 @@ func (c *MyConn) Ping() {
 			err := c.Conn.WriteJSON(bson.M{"msg": "ping"})
 			if err != nil {
 				break
-			} else {
-				last = time.Now()
 			}
+			last = time.Now()
 		}
 		time.Sleep(time.Second * 3)
 	}
