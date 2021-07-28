@@ -9,11 +9,6 @@ import (
 	"net/http"
 	"strings"
 	"sync"
-	"time"
-)
-
-const (
-	OVERTIME = time.Second * 5 // 连接超时
 )
 
 // 升级协议
@@ -23,68 +18,48 @@ var upGrader = websocket.Upgrader{
 	},
 }
 
-// 建立连接
-func connect(c *gin.Context) *websocket.Conn {
+// 升级协议
+func upGrade(c *gin.Context) (*websocket.Conn, error) {
 	//升级get请求为webSocket协议
 	ws, err := upGrader.Upgrade(c.Writer, c.Request, nil)
-	if ws == nil {
-		return nil
-	}
 	if err != nil {
-		_ = ws.WriteJSON(bson.M{"msg": "连接服务器错误", "status": false})
-		return nil
+		c.JSON(200, gin.H{
+			"msg": "连接失败", "status": false,
+		})
+		return nil, err
 	}
-	return ws
+	return ws, nil
 }
 
-// ConnectCList 自选表连接
+// ConnectCList 连接自选表
 func ConnectCList(c *gin.Context) {
-	ws := connect(c)
-	// 设置超时
-	err := ws.SetReadDeadline(time.Now().Add(OVERTIME))
+	ws, err := upGrade(c)
 	if err != nil {
-		_ = ws.WriteJSON(bson.M{"msg": "读取代码超时", "status": false})
 		return
 	}
-	// 读取代码
-	msg := map[string]string{}
-	err = ws.ReadJSON(&msg)
-	if err != nil {
-		_ = ws.WriteJSON(bson.M{"msg": "参数读取错误", "status": false})
-		return
-	}
-	code, ok := msg["code"]
+	// 获取参数
+	code, ok := c.GetQuery("code")
 	if !ok {
-		_ = ws.WriteJSON(bson.M{"msg": "必须指定code参数,示例: 000001.SZ,600036.SH", "status": false})
+		_ = ws.WriteJSON(bson.M{"msg": "必须指定code参数", "status": false})
 		return
-	} else {
-		codes := strings.Split(code, ",")
-		AddToConnList(ws, codes, "clist")
 	}
+	codes := strings.Split(code, ",")
+	AddToConnList(ws, codes, "clist")
 }
 
 // ConnectItems 详情页连接
 func ConnectItems(c *gin.Context) {
-	ws := connect(c)
-	//设置超时
-	err := ws.SetReadDeadline(time.Now().Add(OVERTIME))
+	ws, err := upGrade(c)
 	if err != nil {
-		_ = ws.WriteJSON(bson.M{"msg": "读取代码超时", "status": false})
 		return
 	}
-	// 读取代码
-	msg := map[string]string{}
-	err = ws.ReadJSON(&msg)
-	if err != nil {
-		_ = ws.WriteJSON(bson.M{"msg": "参数读取错误", "status": false})
-		return
-	}
-	code, ok := msg["code"]
+	// 获取参数
+	code, ok := c.GetQuery("code")
 	if !ok {
-		_ = ws.WriteJSON(bson.M{"msg": "必须指定code参数,示例: 000001.SZ", "status": false})
+		_ = ws.WriteJSON(bson.M{"msg": "必须指定code参数", "status": false})
 		return
 	}
-	// 检查代码
+	// 检查代码合法
 	check := real.GetStockList([]string{code})
 	if len(check) > 0 {
 		AddToConnList(ws, []string{code}, "items")
@@ -95,12 +70,9 @@ func ConnectItems(c *gin.Context) {
 
 // SendCList 推送消息
 func SendCList() {
+	var err error
+
 	for _, c := range ConnList["clist"] {
-		err := c.Ping()
-		if err != nil {
-			Close(c)
-			continue
-		}
 		// 获取新数据
 		newData := real.GetStockList(c.codes)
 		for i := range newData {
@@ -110,7 +82,7 @@ func SendCList() {
 				err = c.Conn.WriteJSON(newData[i])
 				// 错误 关闭连接
 				if err != nil {
-					Close(c)
+					c.Close()
 					break
 				}
 			}
@@ -120,19 +92,13 @@ func SendCList() {
 
 // SendItems 推送详情页
 func SendItems() {
+	var err error
+
 	for _, c := range ConnList["items"] {
-		err := c.Ping()
-		if err != nil {
-			Close(c)
-			continue
-		}
 		// 获取新数据
 		newData := real.GetStockList(c.codes)[0]
-
 		// 有更新
 		if newData["vol"] != c.data[0]["vol"] {
-			c.data[0] = newData
-
 			group := sync.WaitGroup{}
 			group.Add(2)
 			// 详情
@@ -155,29 +121,17 @@ func SendItems() {
 			// 写入
 			err = c.Conn.WriteJSON(results)
 			if err != nil {
-				Close(c)
-				break
+				c.Close()
 			}
 		}
 	}
 }
 
-// ListenChan 总监听函数
+// ListenChan 监听主函数
 func ListenChan() {
 	for {
 		<-download.MyChan
 		SendItems()
 		SendCList()
-	}
-}
-
-// Close 关闭连接
-func Close(conn *MyConn) {
-	for i, c := range ConnList[conn.Type] {
-		if c.uid == conn.uid {
-			_ = conn.Conn.Close()
-			ConnList[conn.Type] = append(ConnList[conn.Type][:i], ConnList[conn.Type][i+1:]...)
-			break
-		}
 	}
 }

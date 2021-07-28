@@ -1,7 +1,6 @@
 package download
 
 import (
-	"fmt"
 	"fund_go2/common"
 	"github.com/go-gota/gota/dataframe"
 	"github.com/go-gota/gota/series"
@@ -32,7 +31,7 @@ var fs = map[string]string{
 	"US":    "m:105,m:106,m:107",
 }
 
-// 低频更新
+// 低频更新数据
 var basicName = map[string]string{
 	"f13": "cid", "f14": "name", "f15": "high", "f16": "low", "f17": "open", "f18": "close",
 	"f38": "total_share", "f39": "float_share",
@@ -41,7 +40,7 @@ var basicName = map[string]string{
 	//"f24": "pct60day", "f25": "pct_year",
 }
 
-// 高频更新
+// 高频更新数据
 var proName = map[string]string{
 	"f12": "code", "f2": "price", "f3": "pct_chg", "f5": "vol", "f6": "amount",
 	"f10": "vr", "f33": "wb", "f34": "buy", "f35": "sell",
@@ -182,7 +181,7 @@ func getEastMoney(marketType string) {
 	for {
 		// 连接参数
 		tempUrl = url + common.JoinMapKeys(proName, ",")
-		if count >= 10 {
+		if count >= 20 {
 			tempUrl += "," + common.JoinMapKeys(basicName, ",")
 			count = 0
 		}
@@ -221,8 +220,8 @@ func getEastMoney(marketType string) {
 		count++
 		MyChan <- marketType
 
-		for MarketStatus[marketType] {
-			count = 999
+		for !MarketStatus[marketType] {
+			count = 99
 			time.Sleep(time.Millisecond * 100)
 		}
 		time.Sleep(time.Millisecond * 300)
@@ -250,9 +249,9 @@ func getMarketStatus() {
 			market := json.Get([]byte(items), i, "market", "region").ToString()
 			statusName := json.Get([]byte(items), i, "market", "status").ToString()
 			status := Expression(statusName == "交易中", true, false).(bool)
-			fmt.Println(market, statusName, status)
 
 			update := bson.M{"$set": bson.M{"status_name": statusName, "status": status}}
+			MarketStatus[market] = status
 
 			switch market {
 			case "CN":
