@@ -24,7 +24,6 @@ type PeriodOptions struct {
 
 // PeriodData 阶段统计数据
 func PeriodData(c *gin.Context) {
-
 	opt := &PeriodOptions{size: 50}
 
 	periodString, ok := c.GetQuery("period")

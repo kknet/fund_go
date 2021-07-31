@@ -8,7 +8,6 @@ import (
 	"go.mongodb.org/mongo-driver/bson"
 	"net/http"
 	"strings"
-	"sync"
 )
 
 // 升级协议
@@ -92,34 +91,17 @@ func SendCList() {
 
 // SendItems 推送详情页
 func SendItems() {
-	var err error
-
 	for _, c := range ConnList["items"] {
 		// 获取新数据
 		newData := real.GetStockList(c.codes)[0]
 		// 有更新
-		if newData["vol"] != c.data[0]["vol"] {
-			group := sync.WaitGroup{}
-			group.Add(2)
+		if newData["vol"].(int32) > c.data[0]["vol"].(int32) {
 			// 详情
-			results := bson.M{"items": newData}
-			// 盘口明细
-			go func() {
-				if newData["marketType"] == "CN" {
-					results["pankou"] = real.PanKou(c.codes[0])
-				}
-				group.Done()
-			}()
-			// 实时分笔
-			go func() {
-				results["ticks"], _ = real.GetRealtimeTicks(c.codes[0])
-				group.Done()
-			}()
-			group.Wait()
-
+			results := real.GetRealTicks(c.codes[0], 50)
+			results["items"] = newData
 			c.data[0] = newData
 			// 写入
-			err = c.Conn.WriteJSON(results)
+			err := c.Conn.WriteJSON(results)
 			if err != nil {
 				c.Close()
 			}

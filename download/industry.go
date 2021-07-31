@@ -11,7 +11,7 @@ import (
 )
 
 var ctx = context.Background()
-var CollDict = InitMongo()
+var RealColl = InitMongo()
 
 // Expression 自定义三元表达式
 func Expression(b bool, true interface{}, false interface{}) interface{} {
@@ -22,28 +22,21 @@ func Expression(b bool, true interface{}, false interface{}) interface{} {
 	}
 }
 
-func InitMongo() map[string]*qmgo.Collection {
+func InitMongo() *qmgo.Collection {
 	client, err := qmgo.NewClient(ctx, &qmgo.Config{Uri: "mongodb://localhost:27017"})
 	if err != nil {
 		panic(err)
 	}
-	db := client.Database("stock")
-
-	collDict := map[string]*qmgo.Collection{
-		"CN":    db.Collection("CN"),
-		"HK":    db.Collection("HK"),
-		"US":    db.Collection("US"),
-		"Index": db.Collection("Index"), // 存放指数，板块，申万行业
-	}
-	return collDict
+	coll := client.Database("stock").Collection("realStock")
+	return coll
 }
 
-func UpdateMongo(items []map[string]interface{}, marketType string) {
+func UpdateMongo(items []map[string]interface{}) {
 	group := sync.WaitGroup{}
 	group.Add(3)
 
 	myFunc := func(s []map[string]interface{}) {
-		myBulk := CollDict[marketType].Bulk()
+		myBulk := RealColl.Bulk()
 
 		// 初始化事务
 		for i := range s {
@@ -73,10 +66,8 @@ func CalIndustry() {
 		} else {
 			code = "$" + idsName
 		}
-		err := CollDict["CN"].Aggregate(ctx, mongo.Pipeline{
-			bson.D{{"$match", bson.M{
-				idsName: bson.M{"$nin": bson.A{"NaN", "null", nil}}, "vol": bson.M{"$gt": 0},
-			}}},
+		err := RealColl.Aggregate(ctx, mongo.Pipeline{
+			bson.D{{"$match", bson.M{"marketType": "CN", "type": "stock", "vol": bson.M{"$gt": 0}}}},
 			bson.D{{"$sort", bson.M{"pct_chg": -1}}},
 			bson.D{{"$group", bson.M{
 				"_id":         code,
@@ -93,22 +84,25 @@ func CalIndustry() {
 				"power":       bson.M{"$sum": bson.M{"$multiply": bson.A{"$fmc", "$pct_chg"}}},
 			}}},
 		}).All(&results)
-
 		if err != nil {
 			log.Println("CalIndustry错误: ", err)
 		}
 		for _, i := range results {
-			i["type"] = idsName
-			i["marketType"] = "CN"
 			i["tr"] = float64(i["vol"].(int32)) / i["float_share"].(float64) * 10000
 			i["pct_chg"] = i["power"].(float64) / i["fmc"].(float64)
+			i["type"] = idsName
+			i["marketType"] = "CN"
+
+			if idsName != "sw" {
+				delete(i, "code")
+			}
 
 			delete(i, "power")
 			delete(i, "float_share")
 		}
 
 		for _, i := range results {
-			_, err = CollDict["Index"].UpsertId(ctx, i["_id"], i)
+			_, err = RealColl.UpsertId(ctx, i["_id"], i)
 			if err != nil {
 				log.Println(err)
 			}

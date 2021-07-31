@@ -5,7 +5,6 @@ import (
 	"github.com/go-gota/gota/dataframe"
 	"github.com/go-gota/gota/series"
 	jsoniter "github.com/json-iterator/go"
-	"go.mongodb.org/mongo-driver/bson"
 	"io/ioutil"
 	"log"
 	"net/http"
@@ -17,10 +16,13 @@ import (
 var json = jsoniter.ConfigCompatibleWithStandardLibrary
 var MyChan = getGlobalChan()
 
-// MarketStatus 市场状态
-// 盘前交易、交易中、已收盘
-var MarketStatus = map[string]bool{
+// Status 市场状态
+// 盘前交易、交易中、已收盘、休市
+var Status = map[string]bool{
 	"CN": false, "HK": false, "US": false,
+}
+var StatusName = map[string]string{
+	"CN": "", "HK": "", "US": "",
 }
 
 // 参数
@@ -70,21 +72,16 @@ func calData(df dataframe.DataFrame, marketType string) dataframe.DataFrame {
 	index := series.Ints(indexes)
 
 	for _, col := range df.Names() {
-		// cid type marketType
+		// cid
 		if col == "cid" {
-			basic := df.Select([]string{"cid", "code"}).Rapply(func(s series.Series) series.Series {
+			cid := df.Select([]string{"cid", "code"}).Rapply(func(s series.Series) series.Series {
 
 				cid := s.Elem(0).String() + "." + s.Elem(1).String()
-				Type := Expression(marketType == "Index", "index", "stock").(string)
-				market := Expression(marketType == "Index", "CN", marketType).(string)
 
-				return series.Strings([]string{cid, market, Type})
-			})
-			_ = basic.SetNames("cid", "marketType", "type")
-
-			for _, c := range basic.Names() {
-				df = df.Mutate(basic.Col(c))
-			}
+				return series.Strings([]string{cid})
+			}).Col("X0")
+			cid.Name = "cid"
+			df = df.Mutate(cid)
 
 			// tr mc fmc
 		} else if col == "total_share" {
@@ -209,7 +206,7 @@ func getEastMoney(marketType string) {
 		}
 
 		df = calData(df, marketType)
-		UpdateMongo(df.Maps(), marketType)
+		UpdateMongo(df.Maps())
 
 		if marketType == "CN" {
 			// 间隔更新行业数据
@@ -220,9 +217,9 @@ func getEastMoney(marketType string) {
 		count++
 		MyChan <- marketType
 
-		for !MarketStatus[marketType] {
+		for !Status[marketType] {
 			count = 99
-			time.Sleep(time.Millisecond * 100)
+			time.Sleep(time.Millisecond * 300)
 		}
 		time.Sleep(time.Millisecond * 300)
 	}
@@ -246,23 +243,13 @@ func getMarketStatus() {
 
 		// 设置CN，HK，US市场状态
 		for i := 0; i < 3; i++ {
+			// 解析数据
 			market := json.Get([]byte(items), i, "market", "region").ToString()
 			statusName := json.Get([]byte(items), i, "market", "status").ToString()
 			status := Expression(statusName == "交易中", true, false).(bool)
 
-			update := bson.M{"$set": bson.M{"status_name": statusName, "status": status}}
-			MarketStatus[market] = status
-
-			switch market {
-			case "CN":
-				_, err = CollDict["CN"].UpdateAll(ctx, bson.M{}, update)
-				_, _ = CollDict["Index"].UpdateAll(ctx, bson.M{}, update)
-				if err != nil {
-					log.Println(err)
-				}
-			case "HK", "US":
-				_, _ = CollDict[market].UpdateAll(ctx, bson.M{}, update)
-			}
+			Status[market] = status
+			StatusName[market] = statusName
 		}
 		// 每3秒更新
 		time.Sleep(time.Second * 3)
@@ -275,6 +262,5 @@ func GoDownload() {
 	go getEastMoney("Index")
 	go getEastMoney("HK")
 	go getEastMoney("US")
-
 	go getMarketStatus()
 }

@@ -5,6 +5,7 @@ import (
 	"fund_go2/download"
 	"github.com/gin-gonic/gin"
 	"go.mongodb.org/mongo-driver/bson"
+	"math"
 	"strconv"
 	"strings"
 )
@@ -115,9 +116,10 @@ func GetMarket(c *gin.Context) {
 	}
 	if marketType == "CN" {
 		var industry, sw, area []bson.M
-		_ = download.CollDict["Index"].Find(ctx, bson.M{"type": "industry"}).All(&industry)
-		_ = download.CollDict["Index"].Find(ctx, bson.M{"type": "sw"}).All(&sw)
-		_ = download.CollDict["Index"].Find(ctx, bson.M{"type": "area"}).All(&area)
+		notNull := bson.M{"$nin": bson.A{math.NaN(), nil}}
+		_ = download.RealColl.Find(ctx, bson.M{"type": "industry", "name": notNull}).Select(bson.M{"_id": 0}).All(&industry)
+		_ = download.RealColl.Find(ctx, bson.M{"type": "sw", "name": notNull}).Select(bson.M{"_id": 0}).All(&sw)
+		_ = download.RealColl.Find(ctx, bson.M{"type": "area", "name": notNull}).Select(bson.M{"_id": 0}).All(&area)
 
 		c.JSON(200, gin.H{
 			"status": true, "data": bson.M{
@@ -130,8 +132,7 @@ func GetMarket(c *gin.Context) {
 	} else {
 		c.JSON(200, gin.H{
 			"status": true, "data": bson.M{
-				"numbers":  getNumbers(marketType),
-				"industry": nil,
+				"numbers": getNumbers(marketType),
 			},
 		})
 	}
@@ -139,21 +140,7 @@ func GetMarket(c *gin.Context) {
 
 func GetTicks(c *gin.Context) {
 	code := c.Query("code")
-	data, err := GetRealtimeTicks(code)
-	if err != nil {
-		c.JSON(200, gin.H{
-			"status": false, "msg": err.Error(),
-		})
-	} else {
-		c.JSON(200, gin.H{
-			"status": true, "data": data,
-		})
-	}
-}
-
-func GetPanKou(c *gin.Context) {
-	code := c.Query("code")
-	data := PanKou(code)
+	data := GetRealTicks(code, 50)
 	c.JSON(200, gin.H{
 		"status": true, "data": data,
 	})

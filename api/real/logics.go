@@ -2,7 +2,6 @@ package real
 
 import (
 	"context"
-	"errors"
 	"fund_go2/common"
 	"fund_go2/download"
 	"github.com/go-gota/gota/dataframe"
@@ -13,6 +12,7 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"sync"
 )
 
 // jsoniter
@@ -36,11 +36,7 @@ func GetStockList(codes []string) []bson.M {
 		options = bson.M{"adj_factor": 0, "_id": 0}
 	}
 
-	for i := range download.CollDict {
-		var items []bson.M
-		_ = download.CollDict[i].Find(ctx, bson.M{"_id": bson.M{"$in": codes}}).Select(options).All(&items)
-		data = append(data, items...)
-	}
+	_ = download.RealColl.Find(ctx, bson.M{"_id": bson.M{"$in": codes}}).Select(options).All(&data)
 	// 添加行业数据
 	if len(data) == 1 {
 		// 添加行业数据
@@ -48,10 +44,14 @@ func GetStockList(codes []string) []bson.M {
 			sw, ok := data[0][ids].(string)
 			if ok {
 				var info bson.M
-				_ = download.CollDict["Index"].Find(ctx, bson.M{"name": sw}).One(&info)
+				_ = download.RealColl.Find(ctx, bson.M{"name": sw}).One(&info)
 				data[0][ids] = info
 			}
 		}
+		// 添加市场状态
+		marketType := data[0]["marketType"].(string)
+		data[0]["status"] = download.Status[marketType]
+		data[0]["status_name"] = download.StatusName[marketType]
 	}
 	// 排序
 	for _, c := range codes {
@@ -130,13 +130,13 @@ func search(input string) []bson.M {
 	char := strings.Split(input, "")
 	matchStr := strings.Join(char, ".*")
 
-	for _, marketType := range []string{"CN", "HK", "US", "Index"} {
+	for _, marketType := range []string{"CN", "HK", "US"} {
 		var temp []bson.M
 		// 正则匹配 不区分大小写
-		_ = download.CollDict[marketType].Find(ctx, bson.M{"$or": bson.A{
+		_ = download.RealColl.Find(ctx, bson.M{"$or": bson.A{
 			bson.M{"_id": bson.M{"$regex": matchStr, "$options": "i"}},
 			bson.M{"name": bson.M{"$regex": matchStr, "$options": "i"}},
-		},
+		}, "marketType": marketType,
 		}).Sort("-amount").Select(basicOptions).Limit(10).All(&temp)
 		results = append(results, temp...)
 
@@ -160,85 +160,95 @@ func getRank(opt *common.RankOpt) []bson.M {
 		myOptions["3day_main_net"] = 1
 		myOptions["5day_main_net"] = 1
 		myOptions["10day_main_net"] = 1
-		_ = download.CollDict[opt.MarketType].Find(ctx, bson.M{"vol": bson.M{"$gt": 0}, "agg_rank": bson.M{"$gt": 0}}).
-			Sort(opt.SortName).Select(myOptions).Skip(size * (opt.Page - 1)).Limit(size).All(&results)
+		_ = download.RealColl.Find(ctx, bson.M{
+			"marketType": opt.MarketType,
+			"vol":        bson.M{"$gt": 0},
+			"agg_rank":   bson.M{"$gt": 0},
+		}).Sort(opt.SortName).Select(myOptions).Skip(size * (opt.Page - 1)).Limit(size).All(&results)
 
 	} else {
 		if !opt.Sorted {
 			opt.SortName = "-" + opt.SortName
 		}
-		_ = download.CollDict[opt.MarketType].Find(ctx, bson.M{"vol": bson.M{"$gt": 0}}).
-			Sort(opt.SortName).Select(basicOptions).Skip(size * (opt.Page - 1)).Limit(size).All(&results)
+		_ = download.RealColl.Find(ctx, bson.M{
+			"marketType": opt.MarketType,
+			"vol":        bson.M{"$gt": 0},
+			"agg_rank":   bson.M{"$gt": 0},
+		}).Sort(opt.SortName).Select(basicOptions).Skip(size * (opt.Page - 1)).Limit(size).All(&results)
 	}
 	return results
 }
 
-// PanKou 获取五档挂单明细
-func PanKou(code string) bson.M {
-	// 格式化代码为雪球格式
-	code, err := formatStock(code)
-	if err != nil {
-		return bson.M{"msg": "代码格式错误"}
-	}
-	res, _ := http.Get("https://stock.xueqiu.com/v5/stock/realtime/pankou.json?&symbol=" + code)
-	body, _ := ioutil.ReadAll(res.Body)
-	defer res.Body.Close()
-	str := json.Get(body, "data").ToString()
-	// json解析
-	var data bson.M
-	_ = json.Unmarshal([]byte(str), &data)
-	return data
-}
-
-// GetRealtimeTicks 获取最近分笔成交
-func GetRealtimeTicks(code string) (interface{}, error) {
+// GetRealTicks 获取五档挂单明细、分笔成交
+func GetRealTicks(code string, count int) bson.M {
 	cid := GetStockList([]string{code})
-	if len(cid) == 0 {
-		return nil, errors.New("改代码不存在")
+	if len(cid) <= 0 {
+		return nil
 	}
+	result := bson.M{}
+	group := sync.WaitGroup{}
+	group.Add(2)
 
-	url := "https://push2.eastmoney.com/api/qt/stock/details/get?fields1=f1&fields2=f51,f52,f53,f55&pos=-50&secid="
-	res, err := http.Get(url + cid[0]["cid"].(string))
-	if err != nil {
-		return nil, errors.New("请求发生错误")
-	}
-	body, _ := ioutil.ReadAll(res.Body)
-	defer res.Body.Close()
+	go func() {
+		// CN股票才有盘口数据
+		if cid[0]["marketType"] == "CN" {
+			res, _ := http.Get("https://stock.xueqiu.com/v5/stock/realtime/pankou.json?&symbol=" + formatStock(code))
+			body, _ := ioutil.ReadAll(res.Body)
+			defer res.Body.Close()
 
-	var info []string
-	json.Get(body, "data", "details").ToVal(&info)
-
-	df := dataframe.ReadCSV(strings.NewReader("time,price,vol,type\n" + strings.Join(info, "\n")))
-
-	// 更改type
-	side := df.Col("type").Map(func(data series.Element) series.Element {
-		switch data.Float() {
-		case 4:
-			data.Set(0)
-		case 1:
-			data.Set(-1)
-		case 2:
-			data.Set(1)
+			var data bson.M
+			json.Get(body, "data").ToVal(&data)
+			result["pankou"] = data
+		} else {
+			result["pankou"] = nil
 		}
-		return data
-	})
-	df = df.Mutate(side)
-	return df.Maps(), nil
+		group.Done()
+	}()
+	go func() {
+		url := "https://push2.eastmoney.com/api/qt/stock/details/get?fields1=f1&fields2=f51,f52,f53,f55"
+		url += "&pos=-" + strconv.Itoa(count) + "&secid=" + cid[0]["cid"].(string)
+		res, _ := http.Get(url)
+		body, _ := ioutil.ReadAll(res.Body)
+		defer res.Body.Close()
+
+		var info []string
+		json.Get(body, "data", "details").ToVal(&info)
+
+		df := dataframe.ReadCSV(strings.NewReader("time,price,vol,type\n" + strings.Join(info, "\n")))
+		side := df.Col("type").Map(func(data series.Element) series.Element {
+			switch data.Float() {
+			case 4:
+				data.Set(0)
+			case 1:
+				data.Set(-1)
+			case 2:
+				data.Set(1)
+			}
+			return data
+		})
+		df = df.Mutate(side)
+		result["ticks"] = df.Maps()
+		group.Done()
+	}()
+	group.Wait()
+	return result
 }
 
 // formatStock 股票代码格式化为雪球代码
-func formatStock(input string) (string, error) {
+func formatStock(input string) string {
 	if strings.Contains(input, ".") {
 		item := strings.Split(input, ".")
 
 		switch item[1] {
 		case "SH", "SZ":
-			return item[1] + item[0], nil
+			return item[1] + item[0]
 		case "HK", "US":
-			return item[0], nil
+			return item[0]
+		default:
+			return ""
 		}
 	}
-	return "", errors.New("代码格式不正确")
+	return ""
 }
 
 // getNumbers 获取涨跌分布
@@ -246,18 +256,18 @@ func getNumbers(marketType string) bson.M {
 	label := []string{"跌停", "<7", "7-5", "5-3", "3-0", "0", "0-3", "3-5", "5-7", ">7", "涨停"}
 	num := make([]int64, 11)
 
-	match := []interface{}{
-		bson.M{"wb": -100},
-		bson.M{"pct_chg": bson.M{"$lt": -7}},
-		bson.M{"pct_chg": bson.M{"$lt": -5, "$gte": -7}},
-		bson.M{"pct_chg": bson.M{"$lt": -3, "$gte": -5}},
-		bson.M{"pct_chg": bson.M{"$lt": -0, "$gte": -3}},
-		bson.M{"pct_chg": bson.M{"$eq": 0}},
-		bson.M{"pct_chg": bson.M{"$gt": 0, "$lte": 3}},
-		bson.M{"pct_chg": bson.M{"$gt": 3, "$lte": 5}},
-		bson.M{"pct_chg": bson.M{"$gt": 5, "$lte": 7}},
-		bson.M{"pct_chg": bson.M{"$gt": 7}},
-		bson.M{"wb": 100},
+	match := []bson.M{
+		{"wb": -100},
+		{"pct_chg": bson.M{"$lt": -7}},
+		{"pct_chg": bson.M{"$lt": -5, "$gte": -7}},
+		{"pct_chg": bson.M{"$lt": -3, "$gte": -5}},
+		{"pct_chg": bson.M{"$lt": -0, "$gte": -3}},
+		{"pct_chg": bson.M{"$eq": 0}},
+		{"pct_chg": bson.M{"$gt": 0, "$lte": 3}},
+		{"pct_chg": bson.M{"$gt": 3, "$lte": 5}},
+		{"pct_chg": bson.M{"$gt": 5, "$lte": 7}},
+		{"pct_chg": bson.M{"$gt": 7}},
+		{"wb": 100},
 	}
 	if marketType != "CN" {
 		label[0] = "<10"
@@ -266,7 +276,9 @@ func getNumbers(marketType string) bson.M {
 		match[10] = bson.M{"pct_chg": bson.M{"$gt": 10}}
 	}
 	for i := range match {
-		num[i], _ = download.CollDict[marketType].Find(ctx, match[i]).Count()
+		match[i]["marketType"] = marketType
+		match[i]["type"] = "stock"
+		num[i], _ = download.RealColl.Find(ctx, match[i]).Count()
 	}
 
 	return bson.M{"label": label, "value": num}

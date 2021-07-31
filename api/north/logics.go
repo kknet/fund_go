@@ -1,11 +1,18 @@
 package north
 
 import (
-	"log"
+	"github.com/go-gota/gota/dataframe"
+	jsoniter "github.com/json-iterator/go"
+	"go.mongodb.org/mongo-driver/bson"
+	"io/ioutil"
+	"net/http"
 	"strconv"
+	"strings"
 	"xorm.io/xorm"
 )
 
+// jsoniter
+var json = jsoniter.ConfigCompatibleWithStandardLibrary
 var northDB = ConnectDB()
 
 // ConnectDB 连接数据库
@@ -22,7 +29,7 @@ func ConnectDB() *xorm.Engine {
 func GetTopTen() []map[string]interface{} {
 	data, err := northDB.Table("top_ten").QueryInterface()
 	if err != nil {
-		log.Println(err)
+		return nil
 	}
 	return data
 }
@@ -36,7 +43,6 @@ func GetPeriodData(opt *PeriodOptions) []map[string]interface{} {
 	} else {
 		bulk = northDB.Table(opt.tradeDate)
 	}
-
 	//sort
 	orderName := opt.orderName
 	if !opt.order {
@@ -45,7 +51,25 @@ func GetPeriodData(opt *PeriodOptions) []map[string]interface{} {
 
 	data, err := bulk.OrderBy(orderName).Limit(opt.size).QueryInterface()
 	if err != nil {
-		return []map[string]interface{}{}
+		return nil
 	}
 	return data
+}
+
+// GetNorthFlow 北向资金流向
+func GetNorthFlow() interface{} {
+	url := "https://push2.eastmoney.com/api/qt/kamt.rtmin/get?fields1=f1,f3&fields2=f52,f54,f56"
+	res, _ := http.Get(url)
+	body, _ := ioutil.ReadAll(res.Body)
+	defer res.Body.Close()
+
+	var str []string
+	json.Get(body, "data", "s2n").ToVal(&str)
+
+	df := dataframe.ReadCSV(strings.NewReader("hgt,sgt,all\n" + strings.Join(str, "\n")))
+	return bson.M{
+		"hgt": df.Col("hgt").Float(),
+		"sgt": df.Col("sgt").Float(),
+		"all": df.Col("all").Float(),
+	}
 }

@@ -18,6 +18,7 @@ func main() {
 	// 启动后台下载
 	download.GoDownload()
 
+	var err error
 	// 设置日志
 	//gin.DisableConsoleColor()
 	//f, err := os.Create("./logs/run.log")
@@ -35,12 +36,16 @@ func main() {
 	v1 := r.Group("/api/v1")
 	ws := r.Group("/ws")
 
+	// WebSocket
+	wsStock := ws.Group("/stock")
+	wsStock.GET("/clist", apiV1.ConnectCList)
+	wsStock.GET("/items", apiV1.ConnectItems)
+
 	// Real 实时数据
 	Real := v1.Group("/stock")
-	// Fina 财务数据
-	Fina := v1.Group("/fina")
-	// North 北向资金
-	North := v1.Group("/north")
+	Real.GET("/chart/:chart_type", real.GetChart)
+	Real.GET("/market", real.GetMarket)
+	Real.GET("/ticks", real.GetTicks)
 
 	// CList
 	CList := Real.Group("/clist")
@@ -48,23 +53,15 @@ func main() {
 	CList.GET("/rank", real.GetRank)
 	CList.GET("/search", real.Search)
 
-	Real.GET("/chart/:chart_type", real.GetChart)
-	Real.GET("/market", real.GetMarket)
-	Real.GET("/ticks", real.GetTicks)
-	Real.GET("/pankou", real.GetPanKou)
-
-	// Fina
+	// Fina 财务数据
+	Fina := v1.Group("/fina")
 	Fina.GET("/get", fina.GetFina)
 	Fina.GET("/filter", fina.Filter)
 
-	// North
+	// North 北向资金
+	North := v1.Group("/north")
 	North.GET("/top_ten", north.TopTen)
 	North.GET("/period", north.PeriodData)
-
-	// WebSocket
-	wsStock := ws.Group("/stock")
-	wsStock.GET("/clist", apiV1.ConnectCList)
-	wsStock.GET("/items", apiV1.ConnectItems)
 
 	// 错误处理
 	r.NoRoute(func(context *gin.Context) {
@@ -72,7 +69,7 @@ func main() {
 	})
 
 	// 启动
-	err := r.Run("0.0.0.0:10888")
+	err = r.Run("0.0.0.0:10888")
 	if err != nil {
 		panic(err)
 	}
