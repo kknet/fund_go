@@ -37,7 +37,7 @@ func GetStockList(codes []string) []bson.M {
 	}
 
 	_ = download.RealColl.Find(ctx, bson.M{"_id": bson.M{"$in": codes}}).Select(options).All(&data)
-	// 添加行业数据
+	// 单只股票数据
 	if len(data) == 1 {
 		// 添加行业数据
 		for _, ids := range []string{"sw", "industry", "area"} {
@@ -72,7 +72,6 @@ func AddSimpleMinute(items bson.M) {
 		items["chart"] = bson.M{}
 		return
 	}
-
 	var info []string
 	url := "https://push2.eastmoney.com/api/qt/stock/trends2/get?fields1=f1,f5,f8,f10,f11&fields2=f53&iscr=0&secid="
 
@@ -132,11 +131,13 @@ func search(input string) []bson.M {
 
 	for _, marketType := range []string{"CN", "HK", "US"} {
 		var temp []bson.M
-		// 正则匹配 不区分大小写
-		_ = download.RealColl.Find(ctx, bson.M{"$or": bson.A{
-			bson.M{"_id": bson.M{"$regex": matchStr, "$options": "i"}},
-			bson.M{"name": bson.M{"$regex": matchStr, "$options": "i"}},
-		}, "marketType": marketType,
+
+		_ = download.RealColl.Find(ctx, bson.M{
+			"marketType": marketType, "type": "stock", "$or": bson.A{
+				// 正则匹配 不区分大小写
+				bson.M{"_id": bson.M{"$regex": matchStr, "$options": "i"}},
+				bson.M{"name": bson.M{"$regex": matchStr, "$options": "i"}},
+			},
 		}).Sort("-amount").Select(basicOptions).Limit(10).All(&temp)
 		results = append(results, temp...)
 
@@ -144,6 +145,18 @@ func search(input string) []bson.M {
 			return results[0:10]
 		}
 	}
+
+	// 指数
+	var temp []bson.M
+	_ = download.RealColl.Find(ctx, bson.M{
+		"type": bson.M{"$ne": "stock"}, "$or": bson.A{
+			// 正则匹配 不区分大小写
+			bson.M{"_id": bson.M{"$regex": matchStr, "$options": "i"}},
+			bson.M{"name": bson.M{"$regex": matchStr, "$options": "i"}},
+		},
+	}).Select(basicOptions).Limit(10).All(&temp)
+	results = append(results, temp...)
+
 	if len(results) >= 10 {
 		return results[0:10]
 	}
@@ -192,7 +205,8 @@ func GetRealTicks(code string, count int) bson.M {
 	go func() {
 		// CN股票才有盘口数据
 		if cid[0]["marketType"] == "CN" {
-			res, _ := http.Get("https://stock.xueqiu.com/v5/stock/realtime/pankou.json?&symbol=" + formatStock(code))
+			items := strings.Split(cid[0]["code"].(string), ".")
+			res, _ := http.Get("https://stock.xueqiu.com/v5/stock/realtime/pankou.json?&symbol=" + items[1] + items[0])
 			body, _ := ioutil.ReadAll(res.Body)
 			defer res.Body.Close()
 
@@ -232,23 +246,6 @@ func GetRealTicks(code string, count int) bson.M {
 	}()
 	group.Wait()
 	return result
-}
-
-// formatStock 股票代码格式化为雪球代码
-func formatStock(input string) string {
-	if strings.Contains(input, ".") {
-		item := strings.Split(input, ".")
-
-		switch item[1] {
-		case "SH", "SZ":
-			return item[1] + item[0]
-		case "HK", "US":
-			return item[0]
-		default:
-			return ""
-		}
-	}
-	return ""
 }
 
 // getNumbers 获取涨跌分布

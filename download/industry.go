@@ -58,19 +58,22 @@ func UpdateMongo(items []map[string]interface{}) {
 // CalIndustry 聚合计算板块数据
 func CalIndustry() {
 	var results []bson.M
+	var Id string
 
 	for _, idsName := range []string{"sw", "industry", "area"} {
-		var code string
+		// 申万行业的_id为sw_code
 		if idsName == "sw" {
-			code = "$sw_code"
+			Id = "$sw_code"
+			// 其它_id为 idsName + name ("area广东")
 		} else {
-			code = "$" + idsName
+			Id = "$" + idsName
 		}
+
 		err := RealColl.Aggregate(ctx, mongo.Pipeline{
 			bson.D{{"$match", bson.M{"marketType": "CN", "type": "stock", "vol": bson.M{"$gt": 0}}}},
 			bson.D{{"$sort", bson.M{"pct_chg": -1}}},
 			bson.D{{"$group", bson.M{
-				"_id":         code,
+				"_id":         Id,
 				"code":        bson.M{"$first": "$sw_code"},
 				"name":        bson.M{"$first": "$" + idsName},
 				"max_pct":     bson.M{"$first": "$pct_chg"},
@@ -79,7 +82,10 @@ func CalIndustry() {
 				"net":         bson.M{"$sum": "$net"},
 				"vol":         bson.M{"$sum": "$vol"},
 				"amount":      bson.M{"$sum": "$amount"},
+				"mc":          bson.M{"$sum": "$mc"},
 				"fmc":         bson.M{"$sum": "$fmc"},
+				"pe_ttm":      bson.M{"$avg": "$pe_ttm"},
+				"pb":          bson.M{"$avg": "$pb"},
 				"float_share": bson.M{"$sum": "$float_share"},
 				"power":       bson.M{"$sum": bson.M{"$multiply": bson.A{"$fmc", "$pct_chg"}}},
 			}}},
@@ -88,6 +94,10 @@ func CalIndustry() {
 			log.Println("CalIndustry错误: ", err)
 		}
 		for _, i := range results {
+			_, ok := i["_id"].(string)
+			if !ok {
+				continue
+			}
 			i["tr"] = float64(i["vol"].(int32)) / i["float_share"].(float64) * 10000
 			i["pct_chg"] = i["power"].(float64) / i["fmc"].(float64)
 			i["type"] = idsName
@@ -96,12 +106,9 @@ func CalIndustry() {
 			if idsName != "sw" {
 				delete(i, "code")
 			}
-
 			delete(i, "power")
 			delete(i, "float_share")
-		}
 
-		for _, i := range results {
 			_, err = RealColl.UpsertId(ctx, i["_id"], i)
 			if err != nil {
 				log.Println(err)

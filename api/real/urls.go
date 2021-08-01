@@ -5,7 +5,6 @@ import (
 	"fund_go2/download"
 	"github.com/gin-gonic/gin"
 	"go.mongodb.org/mongo-driver/bson"
-	"math"
 	"strconv"
 	"strings"
 )
@@ -35,10 +34,14 @@ func GetChart(c *gin.Context) {
 func GetCList(c *gin.Context) {
 	var data []bson.M
 	// 指定code
-	codes := c.Query("code")
-	if codes != "" {
+	codes, ok := c.GetQuery("code")
+	if ok {
 		clist := strings.Split(codes, ",")
 		data = GetStockList(clist)
+	} else {
+		c.JSON(200, gin.H{
+			"status": false, "msg": "必须指定code参数",
+		})
 	}
 	// 可指定chart, 获取简略图表数据
 	switch c.Query("chart") {
@@ -116,10 +119,11 @@ func GetMarket(c *gin.Context) {
 	}
 	if marketType == "CN" {
 		var industry, sw, area []bson.M
-		notNull := bson.M{"$nin": bson.A{math.NaN(), nil}}
-		_ = download.RealColl.Find(ctx, bson.M{"type": "industry", "name": notNull}).Select(bson.M{"_id": 0}).All(&industry)
-		_ = download.RealColl.Find(ctx, bson.M{"type": "sw", "name": notNull}).Select(bson.M{"_id": 0}).All(&sw)
-		_ = download.RealColl.Find(ctx, bson.M{"type": "area", "name": notNull}).Select(bson.M{"_id": 0}).All(&area)
+		options := bson.M{"_id": 0, "fmc": 0, "mc": 0, "pe_ttm": 0, "pb": 0}
+
+		_ = download.RealColl.Find(ctx, bson.M{"type": "industry"}).Select(options).All(&industry)
+		_ = download.RealColl.Find(ctx, bson.M{"type": "sw"}).Select(options).All(&sw)
+		_ = download.RealColl.Find(ctx, bson.M{"type": "area"}).Select(options).All(&area)
 
 		c.JSON(200, gin.H{
 			"status": true, "data": bson.M{
