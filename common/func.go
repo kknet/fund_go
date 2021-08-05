@@ -31,3 +31,12 @@ func JoinMapKeys(maps map[string]string, concatStr string) string {
 	str = str[:len(str)-1]
 	return str
 }
+
+// Expression 自定义三元表达式
+func Expression(b bool, true interface{}, false interface{}) interface{} {
+	if b {
+		return true
+	} else {
+		return false
+	}
+}

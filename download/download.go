@@ -65,12 +65,6 @@ func getGlobalChan() chan string {
 // 计算股票指标
 func calData(df dataframe.DataFrame, marketType string) dataframe.DataFrame {
 
-	indexes := make([]int, df.Nrow())
-	for i := range indexes {
-		indexes[i] = i + 1
-	}
-	index := series.Ints(indexes)
-
 	for _, col := range df.Names() {
 		// cid
 		if col == "cid" {
@@ -133,27 +127,6 @@ func calData(df dataframe.DataFrame, marketType string) dataframe.DataFrame {
 		return element
 	})
 	df = df.Mutate(code)
-
-	// 主力净流入排名
-	rankCount := 0
-	for _, col := range df.Names() {
-		if strings.Contains(col, "main_net") && (marketType == "CN" || marketType == "HK") {
-			df = df.Arrange(dataframe.RevSort(col))
-			index.Name = col + "_rank"
-			df = df.Mutate(index)
-			rankCount++
-		}
-	}
-
-	// 平均排名
-	if rankCount >= 4 {
-		row := []string{"main_net_rank", "3day_main_net_rank", "5day_main_net_rank", "10day_main_net_rank"}
-		rank := df.Select(row).Rapply(func(s series.Series) series.Series {
-			return series.Floats(s.Mean())
-		}).Col("X0")
-		rank.Name = "agg_rank"
-		df = df.Mutate(rank)
-	}
 
 	// net
 	net := df.Select([]string{"vol", "amount", "buy", "sell"}).Rapply(func(s series.Series) series.Series {

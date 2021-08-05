@@ -1,19 +1,18 @@
 package main
 
 import (
-	apiV1 "fund_go2/api"
+	api "fund_go2/api"
 	"fund_go2/api/fina"
-	"fund_go2/api/north"
 	"fund_go2/api/real"
 	"fund_go2/download"
 	"github.com/gin-gonic/gin"
 	"net/http"
 )
 
-/* 主函数 */
+// 主函数
 func main() {
-	// 监听自选表websocket
-	go apiV1.ListenChan()
+	// 监听websocket
+	go api.ListenChan()
 
 	// 启动后台下载
 	download.GoDownload()
@@ -38,8 +37,8 @@ func main() {
 
 	// WebSocket
 	wsStock := ws.Group("/stock")
-	wsStock.GET("/clist", apiV1.ConnectCList)
-	wsStock.GET("/items", apiV1.ConnectItems)
+	wsStock.GET("/clist", api.ConnectCList)
+	wsStock.GET("/items", api.ConnectItems)
 
 	// Real 实时数据
 	Real := v1.Group("/stock")
@@ -57,11 +56,6 @@ func main() {
 	Fina := v1.Group("/fina")
 	Fina.GET("/get", fina.GetFina)
 	Fina.GET("/filter", fina.Filter)
-
-	// North 北向资金
-	North := v1.Group("/north")
-	North.GET("/top_ten", north.TopTen)
-	North.GET("/period", north.PeriodData)
 
 	// 错误处理
 	r.NoRoute(func(context *gin.Context) {

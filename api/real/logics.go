@@ -23,7 +23,7 @@ var ctx = context.Background()
 var basicOptions = bson.M{
 	"_id": 0, "cid": 1, "code": 1, "name": 1, "type": 1, "marketType": 1,
 	"close": 1, "price": 1, "pct_chg": 1, "vol": 1, "amount": 1, "mc": 1,
-	"agg_rank": 1, "net": 1, "main_net": 1, "tr": 1,
+	"net": 1, "main_net": 1, "tr": 1,
 }
 
 // GetStockList 获取多只股票信息
@@ -31,20 +31,17 @@ func GetStockList(codes []string) []bson.M {
 	var results []bson.M
 	var data []bson.M
 
-	options := basicOptions
-	if len(codes) <= 1 {
-		options = bson.M{"adj_factor": 0, "_id": 0}
-	}
+	options := common.Expression(len(codes) > 1, basicOptions, bson.M{"adj_factor": 0, "_id": 0})
 
 	_ = download.RealColl.Find(ctx, bson.M{"_id": bson.M{"$in": codes}}).Select(options).All(&data)
 	// 单只股票数据
 	if len(data) == 1 {
 		// 添加行业数据
 		for _, ids := range []string{"sw", "industry", "area"} {
-			sw, ok := data[0][ids].(string)
+			name, ok := data[0][ids].(string)
 			if ok {
 				var info bson.M
-				_ = download.RealColl.Find(ctx, bson.M{"name": sw}).One(&info)
+				_ = download.RealColl.Find(ctx, bson.M{"name": name, "type": ids}).One(&info)
 				data[0][ids] = info
 			}
 		}
@@ -67,15 +64,14 @@ func GetStockList(codes []string) []bson.M {
 
 // AddSimpleMinute 添加简略分时行情
 func AddSimpleMinute(items bson.M) {
-	_, ok := items["cid"]
+	cid, ok := items["cid"].(string)
 	if !ok {
 		items["chart"] = bson.M{}
 		return
 	}
 	var info []string
 	url := "https://push2.eastmoney.com/api/qt/stock/trends2/get?fields1=f1,f5,f8,f10,f11&fields2=f53&iscr=0&secid="
-
-	res, _ := http.Get(url + items["cid"].(string))
+	res, _ := http.Get(url + cid)
 	body, _ := ioutil.ReadAll(res.Body)
 	defer res.Body.Close()
 
@@ -166,29 +162,15 @@ func search(input string) []bson.M {
 // getRank 市场排行
 func getRank(opt *common.RankOpt) []bson.M {
 	var results []bson.M
-	var size int64 = 15
 
-	if opt.SortName == "agg_rank" {
-		myOptions := basicOptions
-		myOptions["3day_main_net"] = 1
-		myOptions["5day_main_net"] = 1
-		myOptions["10day_main_net"] = 1
-		_ = download.RealColl.Find(ctx, bson.M{
-			"marketType": opt.MarketType,
-			"vol":        bson.M{"$gt": 0},
-			"agg_rank":   bson.M{"$gt": 0},
-		}).Sort(opt.SortName).Select(myOptions).Skip(size * (opt.Page - 1)).Limit(size).All(&results)
-
-	} else {
-		if !opt.Sorted {
-			opt.SortName = "-" + opt.SortName
-		}
-		_ = download.RealColl.Find(ctx, bson.M{
-			"marketType": opt.MarketType,
-			"vol":        bson.M{"$gt": 0},
-			"agg_rank":   bson.M{"$gt": 0},
-		}).Sort(opt.SortName).Select(basicOptions).Skip(size * (opt.Page - 1)).Limit(size).All(&results)
+	if !opt.Sorted {
+		opt.SortName = "-" + opt.SortName
 	}
+	_ = download.RealColl.Find(ctx, bson.M{
+		"marketType": opt.MarketType,
+		"vol":        bson.M{"$gt": 0},
+		"type":       "stock",
+	}).Sort(opt.SortName).Select(basicOptions).Skip(15 * (opt.Page - 1)).Limit(15).All(&results)
 	return results
 }
 
@@ -279,24 +261,6 @@ func getNumbers(marketType string) bson.M {
 	}
 
 	return bson.M{"label": label, "value": num}
-}
-
-// GetNorthFlow 北向资金流向
-func GetNorthFlow() interface{} {
-	url := "https://push2.eastmoney.com/api/qt/kamt.rtmin/get?fields1=f1,f3&fields2=f52,f54,f56"
-	res, _ := http.Get(url)
-	body, _ := ioutil.ReadAll(res.Body)
-	defer res.Body.Close()
-
-	var str []string
-	json.Get(body, "data", "s2n").ToVal(&str)
-
-	df := dataframe.ReadCSV(strings.NewReader("hgt,sgt,all\n" + strings.Join(str, "\n")))
-	return bson.M{
-		"hgt": df.Col("hgt").Float(),
-		"sgt": df.Col("sgt").Float(),
-		"all": df.Col("all").Float(),
-	}
 }
 
 // GetMainNetFlow 获取大盘主力资金流向
