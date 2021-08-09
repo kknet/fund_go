@@ -137,8 +137,27 @@ func GetMarket(c *gin.Context) {
 	}
 }
 
+// GetMembers 获取成分股
+func GetMembers(c *gin.Context) {
+	code, ok := c.GetQuery("code")
+	if !ok {
+		c.JSON(200, gin.H{
+			"status": false, "msg": "必须指定code参数",
+		})
+	}
+	data := GetIndustryMembers(code)
+	c.JSON(200, gin.H{
+		"status": true, "data": data,
+	})
+}
+
 func GetTicks(c *gin.Context) {
-	code := c.Query("code")
+	code, ok := c.GetQuery("code")
+	if !ok {
+		c.JSON(200, gin.H{
+			"status": false, "msg": "必须指定code参数",
+		})
+	}
 	data := GetRealTicks(code, 50)
 	c.JSON(200, gin.H{
 		"status": true, "data": data,

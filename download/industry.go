@@ -2,6 +2,7 @@ package download
 
 import (
 	"context"
+	"fund_go2/common"
 	_ "github.com/lib/pq"
 	"github.com/qiniu/qmgo"
 	"go.mongodb.org/mongo-driver/bson"
@@ -58,23 +59,20 @@ func UpdateMongo(items []map[string]interface{}) {
 // CalIndustry 聚合计算板块数据
 func CalIndustry() {
 	var results []bson.M
-	var Id string
 
 	for _, idsName := range []string{"sw", "industry", "area"} {
+
 		// 申万行业的_id为sw_code
-		if idsName == "sw" {
-			Id = "$sw_code"
-			// 其它_id为 idsName + name ("area广东")
-		} else {
-			Id = "$" + idsName
-		}
+		id := common.Expression(idsName == "sw", "$sw_code", "$"+idsName).(string)
 
 		err := RealColl.Aggregate(ctx, mongo.Pipeline{
-			bson.D{{"$match", bson.M{"marketType": "CN", "type": "stock", "vol": bson.M{"$gt": 0}}}},
+			bson.D{{"$match", bson.M{
+				"marketType": "CN", "type": "stock", "vol": bson.M{"$gt": 0},
+			}}},
 			bson.D{{"$sort", bson.M{"pct_chg": -1}}},
 			bson.D{{"$group", bson.M{
-				"_id":         Id,
-				"code":        bson.M{"$first": "$sw_code"},
+				"_id":         id,
+				"members":     bson.M{"$push": "$code"},
 				"name":        bson.M{"$first": "$" + idsName},
 				"max_pct":     bson.M{"$first": "$pct_chg"},
 				"领涨股":         bson.M{"$first": "$name"},
@@ -84,6 +82,9 @@ func CalIndustry() {
 				"amount":      bson.M{"$sum": "$amount"},
 				"mc":          bson.M{"$sum": "$mc"},
 				"fmc":         bson.M{"$sum": "$fmc"},
+				"roe":         bson.M{"$avg": "$roe"},
+				"revenue_yoy": bson.M{"$avg": "$revenue_yoy"},
+				"income_yoy":  bson.M{"$avg": "$income_yoy"},
 				"pe_ttm":      bson.M{"$avg": "$pe_ttm"},
 				"pb":          bson.M{"$avg": "$pb"},
 				"float_share": bson.M{"$sum": "$float_share"},
@@ -93,6 +94,7 @@ func CalIndustry() {
 		if err != nil {
 			log.Println("CalIndustry错误: ", err)
 		}
+
 		for _, i := range results {
 			_, ok := i["_id"].(string)
 			if !ok {
@@ -102,9 +104,8 @@ func CalIndustry() {
 			i["pct_chg"] = i["power"].(float64) / i["fmc"].(float64)
 			i["type"] = idsName
 			i["marketType"] = "CN"
-
-			if idsName != "sw" {
-				delete(i, "code")
+			if idsName == "sw" {
+				i["code"] = i["_id"]
 			}
 			delete(i, "power")
 			delete(i, "float_share")

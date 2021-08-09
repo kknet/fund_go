@@ -51,6 +51,7 @@ func main() {
 	CList.GET("/get", real.GetCList)
 	CList.GET("/rank", real.GetRank)
 	CList.GET("/search", real.Search)
+	CList.GET("/members", real.GetMembers)
 
 	// Fina 财务数据
 	Fina := v1.Group("/fina")

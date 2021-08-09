@@ -23,7 +23,7 @@ var ctx = context.Background()
 var basicOptions = bson.M{
 	"_id": 0, "cid": 1, "code": 1, "name": 1, "type": 1, "marketType": 1,
 	"close": 1, "price": 1, "pct_chg": 1, "vol": 1, "amount": 1, "mc": 1,
-	"net": 1, "main_net": 1, "tr": 1,
+	"net": 1, "main_net": 1, "tr": 1, "roe": 1, "income_yoy": 1, "revenue_yoy": 1,
 }
 
 // GetStockList 获取多只股票信息
@@ -283,4 +283,14 @@ func GetMainNetFlow() interface{} {
 		"big":      df.Col("big").Float(),
 		"huge":     df.Col("huge").Float(),
 	}
+}
+
+// GetIndustryMembers 获取板块成分股
+func GetIndustryMembers(industryCode string) []bson.M {
+	var members bson.M
+	var data []bson.M
+	_ = download.RealColl.Find(ctx, bson.M{"_id": industryCode}).Select(bson.M{"members": 1}).One(&members)
+	_ = download.RealColl.Find(ctx, bson.M{"_id": bson.M{"$in": members["members"]}}).Select(basicOptions).All(&data)
+
+	return data
 }

@@ -39,14 +39,13 @@ var basicName = map[string]string{
 	"f38": "total_share", "f39": "float_share",
 	"f267": "3day_main_net", "f164": "5day_main_net", "f174": "10day_main_net",
 	"f23": "pb", "f115": "pe_ttm",
-	//"f24": "pct60day", "f25": "pct_year",
+	"f37": "roe", "40": "revenue", "f41": "revenue_yoy", "f45": "income", "f46": "income_yoy",
 }
 
 // 高频更新数据
 var proName = map[string]string{
 	"f12": "code", "f2": "price", "f3": "pct_chg", "f5": "vol", "f6": "amount",
 	"f10": "vr", "f33": "wb", "f34": "buy", "f35": "sell",
-	//"f22": "pct_rate", "f11": "pct5min",
 	"f64": "huge_in", "f65": "huge_out", "f70": "big_in", "f71": "big_out",
 	"f78": "main_mid", "f84": "main_small",
 }
@@ -142,7 +141,7 @@ func calData(df dataframe.DataFrame, marketType string) dataframe.DataFrame {
 }
 
 // 下载数据
-func getEastMoney(marketType string) {
+func getRealStock(marketType string) {
 	url := "https://push2.eastmoney.com/api/qt/clist/get?po=1&fid=f20&pz=4600&np=1&fltt=2&pn=1&fs=" + fs[marketType] + "&fields="
 	var tempUrl string
 	// 定时更新计数器
@@ -231,9 +230,9 @@ func getMarketStatus() {
 
 // GoDownload 主函数
 func GoDownload() {
-	go getEastMoney("CN")
-	go getEastMoney("Index")
-	go getEastMoney("HK")
-	go getEastMoney("US")
 	go getMarketStatus()
+	go getRealStock("CN")
+	go getRealStock("Index")
+	go getRealStock("HK")
+	go getRealStock("US")
 }
