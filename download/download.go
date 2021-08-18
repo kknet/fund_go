@@ -19,10 +19,10 @@ var MyChan = getGlobalChan()
 // Status 市场状态
 // 盘前交易、交易中、已收盘、休市
 var Status = map[string]bool{
-	"CN": false, "HK": false, "US": false,
+	"CN": false, "HK": false, "US": false, "Index": false,
 }
 var StatusName = map[string]string{
-	"CN": "", "HK": "", "US": "",
+	"CN": "", "HK": "", "US": "", "Index": "",
 }
 
 // 参数
@@ -35,7 +35,7 @@ var fs = map[string]string{
 
 // 低频更新数据
 var basicName = map[string]string{
-	"f13": "cid", "f14": "name", "f15": "high", "f16": "low", "f17": "open", "f18": "close",
+	"f13": "cid", "f14": "name", "f17": "open", "f18": "close",
 	"f38": "total_share", "f39": "float_share",
 	"f267": "3day_main_net", "f164": "5day_main_net", "f174": "10day_main_net",
 	"f23": "pb", "f115": "pe_ttm",
@@ -44,8 +44,8 @@ var basicName = map[string]string{
 
 // 高频更新数据
 var proName = map[string]string{
-	"f12": "code", "f2": "price", "f3": "pct_chg", "f5": "vol", "f6": "amount",
-	"f10": "vr", "f33": "wb", "f34": "buy", "f35": "sell",
+	"f12": "code", "f2": "price", "f15": "high", "f16": "low", "f3": "pct_chg",
+	"f5": "vol", "f6": "amount", "f10": "vr", "f33": "wb", "f34": "buy", "f35": "sell",
 	"f64": "huge_in", "f65": "huge_out", "f70": "big_in", "f71": "big_out",
 	"f78": "main_mid", "f84": "main_small",
 }
@@ -182,7 +182,7 @@ func getRealStock(marketType string) {
 
 		if marketType == "CN" {
 			// 间隔更新行业数据
-			if count%10 == 0 {
+			if count%5 == 0 {
 				go CalIndustry()
 			}
 		}
@@ -222,6 +222,10 @@ func getMarketStatus() {
 
 			Status[market] = status
 			StatusName[market] = statusName
+			if market == "CN" {
+				Status["Index"] = status
+				StatusName["Index"] = statusName
+			}
 		}
 		// 每3秒更新
 		time.Sleep(time.Second * 3)

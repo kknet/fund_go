@@ -22,8 +22,8 @@ var ctx = context.Background()
 // query options
 var basicOptions = bson.M{
 	"_id": 0, "cid": 1, "code": 1, "name": 1, "type": 1, "marketType": 1,
-	"close": 1, "price": 1, "pct_chg": 1, "vol": 1, "amount": 1, "mc": 1,
-	"net": 1, "main_net": 1, "tr": 1, "roe": 1, "income_yoy": 1, "revenue_yoy": 1,
+	"close": 1, "price": 1, "pct_chg": 1, "amount": 1, "mc": 1, "tr": 1,
+	"net": 1, "main_net": 1, "roe": 1, "income_yoy": 1, "revenue_yoy": 1,
 }
 
 // GetStockList 获取多只股票信息
@@ -36,19 +36,28 @@ func GetStockList(codes []string) []bson.M {
 	_ = download.RealColl.Find(ctx, bson.M{"_id": bson.M{"$in": codes}}).Select(options).All(&data)
 	// 单只股票数据
 	if len(data) == 1 {
+		group := sync.WaitGroup{}
+		group.Add(3)
 		// 添加行业数据
-		for _, ids := range []string{"sw", "industry", "area"} {
+		addIndustry := func(ids string) {
 			name, ok := data[0][ids].(string)
 			if ok {
 				var info bson.M
 				_ = download.RealColl.Find(ctx, bson.M{"name": name, "type": ids}).One(&info)
 				data[0][ids] = info
 			}
+			group.Done()
 		}
+		go addIndustry("industry")
+		go addIndustry("sw")
+		go addIndustry("area")
+
 		// 添加市场状态
 		marketType := data[0]["marketType"].(string)
 		data[0]["status"] = download.Status[marketType]
 		data[0]["status_name"] = download.StatusName[marketType]
+
+		group.Wait()
 	}
 	// 排序
 	for _, c := range codes {

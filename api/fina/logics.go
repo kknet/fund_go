@@ -19,7 +19,7 @@ func ConnectDB() *xorm.Engine {
 
 // GetFinaData 获取股票财务数据
 func GetFinaData(code string, period string) bson.M {
-	data := make([]bson.M, 0)
+	data := make([]map[string]string, 0)
 
 	var endDate string
 	switch period {
@@ -33,8 +33,8 @@ func GetFinaData(code string, period string) bson.M {
 		endDate = "1231"
 	}
 	// 添加每时期数据
-	for _, year := range []string{"2015", "2016", "2017", "2018", "2019", "2020", "2021"} {
-		temp, _ := finaDB.Table(year+endDate).Where("ts_code = ?", code).QueryInterface()
+	for _, year := range []string{"2016", "2017", "2018", "2019", "2020", "2021"} {
+		temp, _ := finaDB.Table(year+endDate).Where("ts_code = ?", code).QueryString()
 		if len(temp) >= 1 {
 			info := temp[0]
 			info["date"] = year + endDate
@@ -42,7 +42,7 @@ func GetFinaData(code string, period string) bson.M {
 		}
 	}
 	// 添加agg复合数据
-	agg, _ := finaDB.Table("agg").Where("ts_code = ?", code).QueryInterface()
+	agg, _ := finaDB.Table("agg").Where("ts_code = ?", code).QueryString()
 	return bson.M{
 		"data": data, "agg": agg[0],
 	}
@@ -53,6 +53,6 @@ func FilterStock() interface{} {
 	info, _ := finaDB.Table("agg").
 		Where("roe >= 20").Where("roa >= 10").Where("grossprofit_margin >= 25").
 		Where("netprofit_yoy >= 20").Where("op_yoy >= 10").Where("or_yoy >= 10").
-		Where("pe_ttm <= 50").Where("total_mv >= 1000000").Where("now_n_income = max_n_income").QueryInterface()
+		Where("pe_ttm <= 50").Where("total_mv >= 1000000").Where("now_n_income = max_n_income").QueryString()
 	return info
 }
