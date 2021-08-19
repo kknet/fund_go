@@ -15,37 +15,60 @@ import (
 	"sync"
 )
 
+const (
+	SimpleMinuteUrl = "https://push2.eastmoney.com/api/qt/stock/trends2/get?fields1=f1,f5,f8,f10,f11&fields2=f53&iscr=0&secid="
+	PanKouUrl       = "https://stock.xueqiu.com/v5/stock/realtime/pankou.json?&symbol="
+	TicksUrl        = "https://push2.eastmoney.com/api/qt/stock/details/get?fields1=f1&fields2=f51,f52,f53,f55"
+)
+
 // jsoniter
 var json = jsoniter.ConfigCompatibleWithStandardLibrary
 var ctx = context.Background()
 
 // query options
-var basicOptions = bson.M{
+var basicOpt = bson.M{
 	"_id": 0, "cid": 1, "code": 1, "name": 1, "type": 1, "marketType": 1,
 	"close": 1, "price": 1, "pct_chg": 1, "amount": 1, "mc": 1, "tr": 1,
 	"net": 1, "main_net": 1, "roe": 1, "income_yoy": 1, "revenue_yoy": 1,
 }
+var allOpt = bson.M{"adj_factor": 0, "_id": 0, "sw_code": 0}
 
 // GetStockList 获取多只股票信息
 func GetStockList(codes []string) []bson.M {
-	var results []bson.M
-	var data []bson.M
 
-	options := common.Expression(len(codes) > 1, basicOptions, bson.M{"adj_factor": 0, "_id": 0})
+	// 多只股票
+	if len(codes) > 1 {
+		var results []bson.M
+		var data []bson.M
+		_ = download.RealColl.Find(ctx, bson.M{"_id": bson.M{"$in": codes}}).Select(basicOpt).All(&data)
 
-	_ = download.RealColl.Find(ctx, bson.M{"_id": bson.M{"$in": codes}}).Select(options).All(&data)
-	// 单只股票数据
-	if len(data) == 1 {
+		// 排序
+		for _, c := range codes {
+			for _, item := range data {
+				if c == item["code"] {
+					results = append(results, item)
+					break
+				}
+			}
+		}
+		return results
+
+		// 单只股票
+	} else if len(codes) == 1 {
+		var data bson.M
+		_ = download.RealColl.Find(ctx, bson.M{"_id": codes[0]}).Select(allOpt).One(&data)
+
+		// 添加行业数据
 		group := sync.WaitGroup{}
 		group.Add(3)
-		// 添加行业数据
+
 		addIndustry := func(ids string) {
-			name, ok := data[0][ids].(string)
-			if ok {
-				var info bson.M
-				_ = download.RealColl.Find(ctx, bson.M{"name": name, "type": ids}).One(&info)
-				data[0][ids] = info
-			}
+			var info bson.M
+
+			_ = download.RealColl.Find(ctx, bson.M{"name": data[ids], "type": ids}).
+				Select(bson.M{"_id": 0, "code": 1, "name": 1, "pct_chg": 1}).One(&info)
+
+			data[ids] = info
 			group.Done()
 		}
 		go addIndustry("industry")
@@ -53,22 +76,16 @@ func GetStockList(codes []string) []bson.M {
 		go addIndustry("area")
 
 		// 添加市场状态
-		marketType := data[0]["marketType"].(string)
-		data[0]["status"] = download.Status[marketType]
-		data[0]["status_name"] = download.StatusName[marketType]
+		marketType := data["marketType"].(string)
+		data["status"] = download.Status[marketType]
+		data["status_name"] = download.StatusName[marketType]
 
 		group.Wait()
+		return []bson.M{data}
+
+	} else {
+		return []bson.M{}
 	}
-	// 排序
-	for _, c := range codes {
-		for _, item := range data {
-			if c == item["code"] {
-				results = append(results, item)
-				break
-			}
-		}
-	}
-	return results
 }
 
 // AddSimpleMinute 添加简略分时行情
@@ -79,8 +96,7 @@ func AddSimpleMinute(items bson.M) {
 		return
 	}
 	var info []string
-	url := "https://push2.eastmoney.com/api/qt/stock/trends2/get?fields1=f1,f5,f8,f10,f11&fields2=f53&iscr=0&secid="
-	res, _ := http.Get(url + cid)
+	res, _ := http.Get(SimpleMinuteUrl + cid)
 	body, _ := ioutil.ReadAll(res.Body)
 	defer res.Body.Close()
 
@@ -134,6 +150,7 @@ func search(input string) []bson.M {
 	char := strings.Split(input, "")
 	matchStr := strings.Join(char, ".*")
 
+	// 先搜索股票
 	for _, marketType := range []string{"CN", "HK", "US"} {
 		var temp []bson.M
 
@@ -143,7 +160,7 @@ func search(input string) []bson.M {
 				bson.M{"_id": bson.M{"$regex": matchStr, "$options": "i"}},
 				bson.M{"name": bson.M{"$regex": matchStr, "$options": "i"}},
 			},
-		}).Sort("-amount").Select(basicOptions).Limit(10).All(&temp)
+		}).Sort("-amount").Select(basicOpt).Limit(10).All(&temp)
 		results = append(results, temp...)
 
 		if len(results) >= 10 {
@@ -159,7 +176,7 @@ func search(input string) []bson.M {
 			bson.M{"_id": bson.M{"$regex": matchStr, "$options": "i"}},
 			bson.M{"name": bson.M{"$regex": matchStr, "$options": "i"}},
 		},
-	}).Select(basicOptions).Limit(10).All(&temp)
+	}).Sort("-amount").Select(basicOpt).Limit(10).All(&temp)
 	results = append(results, temp...)
 
 	if len(results) >= 10 {
@@ -179,7 +196,7 @@ func getRank(opt *common.RankOpt) []bson.M {
 		"marketType": opt.MarketType,
 		"vol":        bson.M{"$gt": 0},
 		"type":       "stock",
-	}).Sort(opt.SortName).Select(basicOptions).Skip(15 * (opt.Page - 1)).Limit(15).All(&results)
+	}).Sort(opt.SortName).Select(basicOpt).Skip(15 * (opt.Page - 1)).Limit(15).All(&results)
 	return results
 }
 
@@ -197,7 +214,7 @@ func GetRealTicks(code string, count int) bson.M {
 		// CN股票才有盘口数据
 		if cid[0]["marketType"] == "CN" {
 			items := strings.Split(cid[0]["code"].(string), ".")
-			res, _ := http.Get("https://stock.xueqiu.com/v5/stock/realtime/pankou.json?&symbol=" + items[1] + items[0])
+			res, _ := http.Get(PanKouUrl + items[1] + items[0])
 			body, _ := ioutil.ReadAll(res.Body)
 			defer res.Body.Close()
 
@@ -210,8 +227,7 @@ func GetRealTicks(code string, count int) bson.M {
 		group.Done()
 	}()
 	go func() {
-		url := "https://push2.eastmoney.com/api/qt/stock/details/get?fields1=f1&fields2=f51,f52,f53,f55"
-		url += "&pos=-" + strconv.Itoa(count) + "&secid=" + cid[0]["cid"].(string)
+		url := TicksUrl + "&pos=-" + strconv.Itoa(count) + "&secid=" + cid[0]["cid"].(string)
 		res, _ := http.Get(url)
 		body, _ := ioutil.ReadAll(res.Body)
 		defer res.Body.Close()
@@ -299,7 +315,7 @@ func GetIndustryMembers(industryCode string) []bson.M {
 	var members bson.M
 	var data []bson.M
 	_ = download.RealColl.Find(ctx, bson.M{"_id": industryCode}).Select(bson.M{"members": 1}).One(&members)
-	_ = download.RealColl.Find(ctx, bson.M{"_id": bson.M{"$in": members["members"]}}).Select(basicOptions).All(&data)
+	_ = download.RealColl.Find(ctx, bson.M{"_id": bson.M{"$in": members["members"]}}).Select(basicOpt).All(&data)
 
 	return data
 }
