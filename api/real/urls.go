@@ -114,7 +114,7 @@ func GetMarket(c *gin.Context) {
 	}
 	if marketType == "CN" {
 		var industry, sw, area []bson.M
-		options := bson.M{"_id": 0, "fmc": 0, "mc": 0, "pe_ttm": 0, "pb": 0}
+		options := bson.M{"_id": 0, "code": 1, "name": 1, "pct_chg": 1, "领涨股": 1, "max_pct": 1, "main_net": 1, "net": 1, "type": 1}
 
 		_ = download.RealColl.Find(ctx, bson.M{"type": "industry"}).Select(options).All(&industry)
 		_ = download.RealColl.Find(ctx, bson.M{"type": "sw"}).Select(options).All(&sw)

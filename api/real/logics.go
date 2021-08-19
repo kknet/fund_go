@@ -64,11 +64,12 @@ func GetStockList(codes []string) []bson.M {
 
 		addIndustry := func(ids string) {
 			var info bson.M
+			if data[ids] != nil {
+				_ = download.RealColl.Find(ctx, bson.M{"name": data[ids], "type": ids}).
+					Select(bson.M{"_id": 0, "members": 0, "marketType": 0, "type": 0}).One(&info)
 
-			_ = download.RealColl.Find(ctx, bson.M{"name": data[ids], "type": ids}).
-				Select(bson.M{"_id": 0, "code": 1, "name": 1, "pct_chg": 1}).One(&info)
-
-			data[ids] = info
+				data[ids] = info
+			}
 			group.Done()
 		}
 		go addIndustry("industry")

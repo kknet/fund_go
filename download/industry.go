@@ -50,6 +50,7 @@ func UpdateMongo(items []map[string]interface{}) {
 		group.Done()
 	}
 	length := len(items)
+	// 三协程
 	go myFunc(items[:length/3])
 	go myFunc(items[length/3+1 : length/3*2])
 	go myFunc(items[length/3*2+1:])
@@ -82,7 +83,6 @@ func CalIndustry() {
 				"amount":      bson.M{"$sum": "$amount"},
 				"mc":          bson.M{"$sum": "$mc"},
 				"fmc":         bson.M{"$sum": "$fmc"},
-				"roe":         bson.M{"$avg": "$roe"},
 				"revenue_yoy": bson.M{"$avg": "$revenue_yoy"},
 				"income_yoy":  bson.M{"$avg": "$income_yoy"},
 				"pe_ttm":      bson.M{"$avg": "$pe_ttm"},

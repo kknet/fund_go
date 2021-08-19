@@ -16,6 +16,12 @@ import (
 var json = jsoniter.ConfigCompatibleWithStandardLibrary
 var MyChan = getGlobalChan()
 
+// 更新频率
+const (
+	MaxCount = 500
+	MidCount = 20
+)
+
 // Status 市场状态
 // 盘前交易、交易中、已收盘、休市
 var Status = map[string]bool{
@@ -33,19 +39,23 @@ var fs = map[string]string{
 	"US":    "m:105,m:106,m:107",
 }
 
-// 低频更新数据
-var basicName = map[string]string{
-	"f13": "cid", "f14": "name", "f17": "open", "f18": "close",
+// 低频更新
+var lowName = map[string]string{
+	"f13": "cid", "f14": "name", "f18": "close",
 	"f38": "total_share", "f39": "float_share",
-	"f267": "3day_main_net", "f164": "5day_main_net", "f174": "10day_main_net",
-	"f23": "pb", "f115": "pe_ttm",
-	"f37": "roe", "40": "revenue", "f41": "revenue_yoy", "f45": "income", "f46": "income_yoy",
+	"f37": "roe", "f40": "revenue", "f41": "revenue_yoy", "f45": "income", "f46": "income_yoy",
 }
 
-// 高频更新数据
+// 中频更新
+var basicName = map[string]string{
+	"f17": "open", "f23": "pb", "f115": "pe_ttm", "f10": "vr",
+	"f267": "3day_main_net", "f164": "5day_main_net", "f174": "10day_main_net",
+}
+
+// 高频更新
 var proName = map[string]string{
 	"f12": "code", "f2": "price", "f15": "high", "f16": "low", "f3": "pct_chg",
-	"f5": "vol", "f6": "amount", "f10": "vr", "f33": "wb", "f34": "buy", "f35": "sell",
+	"f5": "vol", "f6": "amount", "f33": "wb", "f34": "buy", "f35": "sell",
 	"f64": "huge_in", "f65": "huge_out", "f70": "big_in", "f71": "big_out",
 	"f78": "main_mid", "f84": "main_small",
 }
@@ -145,15 +155,18 @@ func getRealStock(marketType string) {
 	url := "https://push2.eastmoney.com/api/qt/clist/get?po=1&fid=f20&pz=4600&np=1&fltt=2&pn=1&fs=" + fs[marketType] + "&fields="
 	var tempUrl string
 	// 定时更新计数器
-	var count = 99
+	var count = MaxCount
 	client := &http.Client{}
 	for {
 		// 连接参数
 		tempUrl = url + common.JoinMapKeys(proName, ",")
-		if count >= 20 {
+		if count%MidCount == 0 {
 			tempUrl += "," + common.JoinMapKeys(basicName, ",")
-			count = 0
 		}
+		if count%MaxCount == 0 {
+			tempUrl += "," + common.JoinMapKeys(lowName, ",")
+		}
+
 		res, err := client.Get(tempUrl)
 		if err != nil {
 			log.Println("下载股票数据失败，3秒后重试...", err.Error())
@@ -172,7 +185,10 @@ func getRealStock(marketType string) {
 		for _, col := range df.Names() {
 			newName, ok := proName[col]
 			if !ok {
-				newName = basicName[col]
+				newName, ok = basicName[col]
+				if !ok {
+					newName = lowName[col]
+				}
 			}
 			df = df.Rename(newName, col)
 		}
@@ -182,15 +198,18 @@ func getRealStock(marketType string) {
 
 		if marketType == "CN" {
 			// 间隔更新行业数据
-			if count%5 == 0 {
+			if count%10 == 0 {
 				go CalIndustry()
 			}
 		}
 		count++
 		MyChan <- marketType
 
+		if count >= MaxCount {
+			count = 0
+		}
 		for !Status[marketType] {
-			count = 99
+			count = MaxCount
 			time.Sleep(time.Millisecond * 300)
 		}
 		time.Sleep(time.Millisecond * 300)

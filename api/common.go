@@ -34,7 +34,7 @@ func AddToConnList(ws *websocket.Conn, codes []string, Type string) {
 		data:  real.GetStockList(codes),
 	}
 	ConnList[Type] = append(ConnList[Type], conn)
-	go conn.Ping()
+	//go conn.Ping()
 }
 
 // Ping 检查连接
