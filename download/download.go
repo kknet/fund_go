@@ -19,7 +19,7 @@ var MyChan = getGlobalChan()
 // 更新频率
 const (
 	MaxCount = 500
-	MidCount = 20
+	MidCount = 10
 )
 
 // Status 市场状态
@@ -74,78 +74,78 @@ func getGlobalChan() chan string {
 // 计算股票指标
 func calData(df dataframe.DataFrame, marketType string) dataframe.DataFrame {
 
-	for _, col := range df.Names() {
-		// cid
-		if col == "cid" {
-			cid := df.Select([]string{"cid", "code"}).Rapply(func(s series.Series) series.Series {
+	code := df.Col("code").Records()
 
-				cid := s.Elem(0).String() + "." + s.Elem(1).String()
-
-				return series.Strings([]string{cid})
-			}).Col("X0")
-			cid.Name = "cid"
-			df = df.Mutate(cid)
-
-			// tr mc fmc
-		} else if col == "total_share" {
-			pct := df.Select([]string{"price", "vol", "total_share", "float_share"}).Rapply(func(s series.Series) series.Series {
-				value := s.Float()
-
-				var tr, mc, fmc float64
-				if value[3] > 0 {
-					tr = value[1] / value[3] * 10000
-				}
-				mc = value[0] * value[2]
-				fmc = value[0] * value[3]
-
-				return series.Floats([]float64{tr, mc, fmc})
-			})
-			_ = pct.SetNames("tr", "mc", "fmc")
-			df = df.CBind(pct)
-
-			// 主力净流入
-		} else if col == "huge_in" && (marketType == "CN" || marketType == "HK") {
-			main := df.Select([]string{"huge_in", "huge_out", "big_in", "big_out"}).Rapply(func(s series.Series) series.Series {
-				value := s.Float()
-				var mainHuge, mainBig, mainIn, mainOut, mainNet float64
-				mainHuge = value[0] - value[1]
-				mainBig = value[2] - value[3]
-				mainIn = value[0] + value[2]
-				mainOut = value[1] + value[3]
-				mainNet = mainIn - mainOut
-
-				return series.Floats([]float64{mainHuge, mainBig, mainIn, mainOut, mainNet})
-			})
-			_ = main.SetNames("main_huge", "main_big", "main_in", "main_out", "main_net")
-			df = df.CBind(main).Drop([]string{"huge_in", "huge_out", "big_in", "big_out"})
+	// cid
+	if common.InSlice("cid", df.Names()) {
+		cid := df.Col("cid").Records()
+		for i := range cid {
+			cid[i] += "." + code[i]
 		}
+		df = df.Mutate(series.New(cid, series.String, "cid"))
 	}
 
 	// code
-	code := df.Col("code").Map(func(element series.Element) series.Element {
-		code := element.String()
+	for i := range code {
 		switch marketType {
 		case "CN":
-			code += Expression(code[0] == '6', ".SH", ".SZ").(string)
+			code[i] += Expression(code[i][0] == '6', ".SH", ".SZ").(string)
 		case "Index":
-			code += Expression(code[0] == '0', ".SH", ".SZ").(string)
+			code[i] += Expression(code[i][0] == '0', ".SH", ".SZ").(string)
 		case "HK", "US":
-			code += "." + marketType
+			code[i] += "." + marketType
 		}
-		element.Set(code)
-		return element
-	})
-	df = df.Mutate(code)
+	}
+	df = df.Mutate(series.New(code, series.String, "code"))
 
 	// net
-	net := df.Select([]string{"vol", "amount", "buy", "sell"}).Rapply(func(s series.Series) series.Series {
-		value := s.Float()
-		return series.Floats([]float64{
-			(value[2] - value[3]) * value[1] / value[0],
+	vol := df.Col("vol").Float()
+	amount := df.Col("amount").Float()
+	buy := df.Col("buy").Float()
+	sell := df.Col("sell").Float()
+	for i := range buy {
+		buy[i] = (buy[i] - sell[i]) * amount[i] / vol[i]
+	}
+	df = df.Mutate(series.New(buy, series.Float, "net"))
+
+	// tr mc fmc
+	if common.InSlice("total_share", df.Names()) {
+		price := df.Col("price").Float()
+		tr := df.Col("vol").Float()
+		mc := df.Col("total_share").Float()
+		fmc := df.Col("float_share").Float()
+
+		for i := range price {
+			if fmc[i] > 0 {
+				tr[i] = tr[i] / fmc[i] * 10000
+			}
+			mc[i] = price[i] * mc[i]
+			fmc[i] = price[i] * fmc[i]
+		}
+		df = df.Mutate(series.New(tr, series.Float, "tr"))
+		df = df.Mutate(series.New(mc, series.Float, "mc"))
+		df = df.Mutate(series.New(fmc, series.Float, "fmc"))
+	}
+
+	// 主力净流入
+	if common.InSlice("huge_in", df.Names()) && common.InSlice(marketType, []string{"CN", "HK"}) {
+		main := df.Select([]string{"huge_in", "huge_out", "big_in", "big_out"}).Rapply(func(s series.Series) series.Series {
+			value := s.Float()
+
+			mainIn := value[0] + value[2]
+			mainOut := value[1] + value[3]
+
+			return series.Floats([]float64{
+				value[0] - value[1], // 超大
+				value[2] - value[3], // 大
+				mainIn,              // 流入
+				mainOut,             // 流出
+				mainIn - mainOut,    // 净流入
+			})
 		})
-	}).Col("X0")
-	net.Name = "net"
-	df = df.Mutate(net).Drop([]string{"buy", "sell"})
+		_ = main.SetNames("main_huge", "main_big", "main_in", "main_out", "main_net")
+		df = df.CBind(main).Drop([]string{"huge_in", "huge_out", "big_in", "big_out"})
+	}
 
 	return df
 }
@@ -216,7 +216,7 @@ func getRealStock(marketType string) {
 	}
 }
 
-// 获取市场状态：盘前、交易中、闭市
+// 获取市场交易状态
 func getMarketStatus() {
 	url := "https://xueqiu.com/service/v5/stock/batch/quote?symbol=SH000001,HKHSI,.IXIC"
 	client := &http.Client{}
@@ -246,8 +246,8 @@ func getMarketStatus() {
 				StatusName["Index"] = statusName
 			}
 		}
-		// 每3秒更新
-		time.Sleep(time.Second * 3)
+		// 每秒更新
+		time.Sleep(time.Second * 1)
 	}
 }
 

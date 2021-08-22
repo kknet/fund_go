@@ -18,6 +18,7 @@ func GoFunc(data []bson.M, myFunc func(m bson.M)) []bson.M {
 	// 多协程
 	group := sync.WaitGroup{}
 	group.Add(len(data))
+
 	for _, item := range data {
 		go func(item bson.M) {
 			myFunc(item)
@@ -48,3 +49,28 @@ func Expression(b bool, true interface{}, false interface{}) interface{} {
 		return false
 	}
 }
+
+// InSlice 判断元素在数组中
+func InSlice(elem string, arr []string) bool {
+	for i := range arr {
+		if elem == arr[i] {
+			return true
+		}
+	}
+	return false
+}
+
+// Operation dataframe列运算
+// exp: Operation(df, "total", "a1", "+", "a2") => df['total'] = df['a1'] + df['a2']
+//func Operation(df dataframe.DataFrame, newCol string, value1 interface{}, operation string, value2 interface{}) {
+//	_, ok := value1.(string)
+//	if !ok {
+//		col1 := value1.(float64)
+//	} else {
+//		col1 :=
+//	}
+//	col1Data := df.Col(col1).Float()
+//	col2Data := df.Col(col2).Float()
+//
+//
+//}

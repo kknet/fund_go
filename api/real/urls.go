@@ -146,6 +146,7 @@ func GetMembers(c *gin.Context) {
 		})
 	}
 	data := GetIndustryMembers(code)
+	data = common.GoFunc(data, AddSimpleMinute)
 	c.JSON(200, gin.H{
 		"status": true, "data": data,
 	})

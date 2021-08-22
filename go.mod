@@ -15,5 +15,6 @@ require (
 	golang.org/x/net v0.0.0-20210716203947-853a461950ff // indirect
 	golang.org/x/sync v0.0.0-20210220032951-036812b2e83c // indirect
 	golang.org/x/text v0.3.6 // indirect
+	gonum.org/v1/gonum v0.9.3 // indirect
 	xorm.io/xorm v1.2.2 // indirect
 )

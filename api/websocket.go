@@ -69,8 +69,6 @@ func ConnectItems(c *gin.Context) {
 
 // SendCList 推送消息
 func SendCList() {
-	var err error
-
 	for _, c := range ConnList["clist"] {
 		// 获取新数据
 		newData := real.GetStockList(c.codes)
@@ -78,7 +76,7 @@ func SendCList() {
 			if newData[i]["pct_chg"] != c.data[i]["pct_chg"] {
 				c.data[i] = newData[i]
 				// 写入
-				err = c.Conn.WriteJSON(newData[i])
+				err := c.Conn.WriteJSON(newData[i])
 				// 错误 关闭连接
 				if err != nil {
 					c.Close()

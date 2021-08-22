@@ -93,7 +93,7 @@ func GetStockList(codes []string) []bson.M {
 func AddSimpleMinute(items bson.M) {
 	cid, ok := items["cid"].(string)
 	if !ok {
-		items["chart"] = bson.M{}
+		items["chart"] = bson.M{"total": 0, "price": nil, "close": nil}
 		return
 	}
 	var info []string
@@ -108,20 +108,16 @@ func AddSimpleMinute(items bson.M) {
 	// 间隔
 	space := 3
 	results := make([]float64, 0)
-	times := make([]string, 0)
 
 	for i := 0; i < len(info); i += space {
 		item := strings.Split(info[i], ",")
 		data, _ := strconv.ParseFloat(item[1], 8)
 		results = append(results, data)
 	}
-	for i := 0; i < (total / space); i++ {
-		times = append(times, "x")
-	}
 	results = append(results, items["price"].(float64))
 
 	items["chart"] = bson.M{
-		"time": times, "price": results, "close": preClose,
+		"total": total / space, "price": results, "close": preClose,
 	}
 }
 
