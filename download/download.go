@@ -5,6 +5,7 @@ import (
 	"github.com/go-gota/gota/dataframe"
 	"github.com/go-gota/gota/series"
 	jsoniter "github.com/json-iterator/go"
+	"gonum.org/v1/gonum/mat"
 	"io/ioutil"
 	"log"
 	"net/http"
@@ -75,7 +76,6 @@ func getGlobalChan() chan string {
 func calData(df dataframe.DataFrame, marketType string) dataframe.DataFrame {
 
 	code := df.Col("code").Records()
-
 	// cid
 	if common.InSlice("cid", df.Names()) {
 		cid := df.Col("cid").Records()
@@ -99,52 +99,42 @@ func calData(df dataframe.DataFrame, marketType string) dataframe.DataFrame {
 	df = df.Mutate(series.New(code, series.String, "code"))
 
 	// net
-	vol := df.Col("vol").Float()
-	amount := df.Col("amount").Float()
-	buy := df.Col("buy").Float()
-	sell := df.Col("sell").Float()
-	for i := range buy {
-		buy[i] = (buy[i] - sell[i]) * amount[i] / vol[i]
-	}
-	df = df.Mutate(series.New(buy, series.Float, "net"))
+	vol := mat.NewVecDense(df.Nrow(), df.Col("vol").Float())
+	amount := mat.NewVecDense(df.Nrow(), df.Col("amount").Float())
+	buy := mat.NewVecDense(df.Nrow(), df.Col("buy").Float())
+	sell := mat.NewVecDense(df.Nrow(), df.Col("sell").Float())
+
+	buy.SubVec(buy, sell)
+	amount.DivElemVec(amount, vol)
+	amount.MulElemVec(amount, buy)
+	df = df.Mutate(series.New(amount.RawVector().Data, series.Float, "net"))
 
 	// tr mc fmc
 	if common.InSlice("total_share", df.Names()) {
-		price := df.Col("price").Float()
-		tr := df.Col("vol").Float()
-		mc := df.Col("total_share").Float()
-		fmc := df.Col("float_share").Float()
+		price := mat.NewVecDense(df.Nrow(), df.Col("price").Float())
+		totalShare := mat.NewVecDense(df.Nrow(), df.Col("total_share").Float())
+		floatShare := mat.NewVecDense(df.Nrow(), df.Col("float_share").Float())
 
-		for i := range price {
-			if fmc[i] > 0 {
-				tr[i] = tr[i] / fmc[i] * 10000
-			}
-			mc[i] = price[i] * mc[i]
-			fmc[i] = price[i] * fmc[i]
-		}
-		df = df.Mutate(series.New(tr, series.Float, "tr"))
-		df = df.Mutate(series.New(mc, series.Float, "mc"))
-		df = df.Mutate(series.New(fmc, series.Float, "fmc"))
+		totalShare.MulElemVec(price, totalShare)
+		df = df.Mutate(series.New(totalShare.RawVector().Data, series.Float, "mc"))
+
+		totalShare.MulElemVec(price, floatShare)
+		df = df.Mutate(series.New(totalShare.RawVector().Data, series.Float, "fmc"))
+
+		totalShare.DivElemVec(vol, floatShare)
+		totalShare.ScaleVec(10000, totalShare)
+		df = df.Mutate(series.New(totalShare.RawVector().Data, series.Float, "tr"))
 	}
 
 	// 主力净流入
 	if common.InSlice("huge_in", df.Names()) && common.InSlice(marketType, []string{"CN", "HK"}) {
-		main := df.Select([]string{"huge_in", "huge_out", "big_in", "big_out"}).Rapply(func(s series.Series) series.Series {
-			value := s.Float()
+		df = common.Operation(df, "main_huge", "huge_in", "-", "huge_out")
+		df = common.Operation(df, "main_big", "big_in", "-", "big_out")
+		df = common.Operation(df, "main_in", "huge_in", "+", "big_in")
+		df = common.Operation(df, "main_out", "huge_out", "+", "big_out")
+		df = common.Operation(df, "main_net", "main_in", "-", "main_out")
 
-			mainIn := value[0] + value[2]
-			mainOut := value[1] + value[3]
-
-			return series.Floats([]float64{
-				value[0] - value[1], // 超大
-				value[2] - value[3], // 大
-				mainIn,              // 流入
-				mainOut,             // 流出
-				mainIn - mainOut,    // 净流入
-			})
-		})
-		_ = main.SetNames("main_huge", "main_big", "main_in", "main_out", "main_net")
-		df = df.CBind(main).Drop([]string{"huge_in", "huge_out", "big_in", "big_out"})
+		df = df.Drop([]string{"huge_in", "huge_out", "big_in", "big_out"})
 	}
 
 	return df

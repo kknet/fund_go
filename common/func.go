@@ -1,7 +1,10 @@
 package common
 
 import (
+	"github.com/go-gota/gota/dataframe"
+	"github.com/go-gota/gota/series"
 	"go.mongodb.org/mongo-driver/bson"
+	"gonum.org/v1/gonum/mat"
 	"strings"
 	"sync"
 )
@@ -62,15 +65,22 @@ func InSlice(elem string, arr []string) bool {
 
 // Operation dataframe列运算
 // exp: Operation(df, "total", "a1", "+", "a2") => df['total'] = df['a1'] + df['a2']
-//func Operation(df dataframe.DataFrame, newCol string, value1 interface{}, operation string, value2 interface{}) {
-//	_, ok := value1.(string)
-//	if !ok {
-//		col1 := value1.(float64)
-//	} else {
-//		col1 :=
-//	}
-//	col1Data := df.Col(col1).Float()
-//	col2Data := df.Col(col2).Float()
-//
-//
-//}
+func Operation(df dataframe.DataFrame, newCol string, col1 string, operation string, col2 string) dataframe.DataFrame {
+
+	value1 := mat.NewVecDense(df.Nrow(), df.Col(col1).Float())
+	value2 := mat.NewVecDense(df.Nrow(), df.Col(col2).Float())
+
+	switch operation {
+	case "+":
+		value1.AddVec(value1, value2)
+	case "-":
+		value1.SubVec(value1, value2)
+	case "*":
+		value1.MulElemVec(value1, value2)
+	case "/":
+		value1.DivElemVec(value1, value2)
+	}
+
+	df = df.Mutate(series.New(value1.RawVector().Data, series.Float, newCol))
+	return df
+}
