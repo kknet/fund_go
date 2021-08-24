@@ -36,14 +36,31 @@ func ConnectCList(c *gin.Context) {
 	if err != nil {
 		return
 	}
+	defer ws.Close()
+
 	// 获取参数
 	code, ok := c.GetQuery("code")
 	if !ok {
 		_ = ws.WriteJSON(bson.M{"msg": "必须指定code参数", "status": false})
 		return
 	}
+
 	codes := strings.Split(code, ",")
-	AddToConnList(ws, codes, "clist")
+	oldData := real.GetStockList(codes)
+	for {
+		<-download.MyChan
+		newData := real.GetStockList(codes)
+		for i := range newData {
+			if newData[i]["pct_chg"] != oldData[i]["pct_chg"] {
+				oldData[i] = newData[i]
+				// 写入
+				err = ws.WriteJSON(newData[i])
+				if err != nil {
+					return
+				}
+			}
+		}
+	}
 }
 
 // ConnectItems 详情页连接
@@ -52,66 +69,35 @@ func ConnectItems(c *gin.Context) {
 	if err != nil {
 		return
 	}
+	defer ws.Close()
+
 	// 获取参数
 	code, ok := c.GetQuery("code")
 	if !ok {
 		_ = ws.WriteJSON(bson.M{"msg": "必须指定code参数", "status": false})
 		return
 	}
-	// 检查代码合法
+
+	// 检查代码是否存在
 	check := real.GetStockList([]string{code})
-	if len(check) > 0 {
-		AddToConnList(ws, []string{code}, "items")
-	} else {
-		_ = ws.WriteJSON(bson.M{"msg": "代码不存在", "status": false})
+	if len(check) <= 0 {
+		return
 	}
-}
 
-// SendCList 推送消息
-func SendCList() {
-	for _, c := range ConnList["clist"] {
-		// 获取新数据
-		newData := real.GetStockList(c.codes)
-		for i := range newData {
-			if newData[i]["pct_chg"] != c.data[i]["pct_chg"] {
-				c.data[i] = newData[i]
-				// 写入
-				err := c.Conn.WriteJSON(newData[i])
-				// 错误 关闭连接
-				if err != nil {
-					c.Close()
-					break
-				}
-			}
-		}
-	}
-}
-
-// SendItems 推送详情页
-func SendItems() {
-	for _, c := range ConnList["items"] {
-		// 获取新数据
-		newData := real.GetStockList(c.codes)[0]
-		// 有更新
-		if newData["vol"].(int32) > c.data[0]["vol"].(int32) {
-			// 详情
-			results := real.GetRealTicks(c.codes[0], 50)
-			results["items"] = newData
-			c.data[0] = newData
-			// 写入
-			err := c.Conn.WriteJSON(results)
-			if err != nil {
-				c.Close()
-			}
-		}
-	}
-}
-
-// ListenChan 监听主函数
-func ListenChan() {
+	oldData := check[0]
 	for {
 		<-download.MyChan
-		SendItems()
-		SendCList()
+		newData := real.GetStockList([]string{code})[0]
+		// 有更新
+		if newData["vol"].(int32) > oldData["vol"].(int32) {
+			// 详情
+			results := real.GetRealTicks(code, 50)
+			results["items"] = newData
+			// 写入
+			err = ws.WriteJSON(results)
+			if err != nil {
+				return
+			}
+		}
 	}
 }

@@ -23,41 +23,44 @@ const (
 	MidCount = 10
 )
 
-// Status 市场状态
-// 盘前交易、交易中、已收盘、休市
+// Status 市场状态：是否开市
 var Status = map[string]bool{
-	"CN": false, "HK": false, "US": false, "Index": false,
+	"CN": false, "HK": false, "US": false,
 }
+
+// StatusName 市场状态描述：盘前交易、交易中、休市中、 已收盘、休市
 var StatusName = map[string]string{
-	"CN": "", "HK": "", "US": "", "Index": "",
+	"CN": "", "HK": "", "US": "",
 }
 
-// 参数
+// 市场参数
 var fs = map[string]string{
-	"Index": "m:1+s:2,m:0+t:5",
-	"CN":    "m:0+t:6,m:0+t:80,m:1+t:2,m:1+t:23",
-	"HK":    "m:116+t:1,m:116+t:2,m:116+t:3,m:116+t:4",
-	"US":    "m:105,m:106,m:107",
+	"CNIndex": "m:1+s:2,m:0+t:5",
+	"CN":      "m:0+t:6,m:0+t:80,m:1+t:2,m:1+t:23",
+	"HK":      "m:116+t:1,m:116+t:2,m:116+t:3,m:116+t:4",
+	"US":      "m:105,m:106,m:107",
 }
 
-// 低频更新
+// 低频数据（开盘时更新）
 var lowName = map[string]string{
 	"f13": "cid", "f14": "name", "f18": "close",
 	"f38": "total_share", "f39": "float_share",
 	"f37": "roe", "f40": "revenue", "f41": "revenue_yoy", "f45": "income", "f46": "income_yoy",
 }
 
-// 中频更新
+// 中频数据（约每分钟更新）
 var basicName = map[string]string{
-	"f17": "open", "f23": "pb", "f115": "pe_ttm", "f10": "vr",
+	"f17": "open", "f23": "pb", "f115": "pe_ttm",
+	"f8": "tr", "f10": "vr", "f20": "mc", "f21": "fmc",
 	"f267": "3day_main_net", "f164": "5day_main_net", "f174": "10day_main_net",
 }
 
-// 高频更新
+// 高频数据（毫秒级更新）
 var proName = map[string]string{
 	"f12": "code", "f2": "price", "f15": "high", "f16": "low", "f3": "pct_chg",
 	"f5": "vol", "f6": "amount", "f33": "wb", "f34": "buy", "f35": "sell",
-	"f64": "huge_in", "f65": "huge_out", "f70": "big_in", "f71": "big_out",
+	"f64": "huge_in", "f65": "huge_out",
+	"f70": "big_in", "f71": "big_out",
 	"f78": "main_mid", "f84": "main_small",
 }
 
@@ -90,7 +93,7 @@ func calData(df dataframe.DataFrame, marketType string) dataframe.DataFrame {
 		switch marketType {
 		case "CN":
 			code[i] += Expression(code[i][0] == '6', ".SH", ".SZ").(string)
-		case "Index":
+		case "CNIndex":
 			code[i] += Expression(code[i][0] == '0', ".SH", ".SZ").(string)
 		case "HK", "US":
 			code[i] += "." + marketType
@@ -99,48 +102,57 @@ func calData(df dataframe.DataFrame, marketType string) dataframe.DataFrame {
 	df = df.Mutate(series.New(code, series.String, "code"))
 
 	// net
-	vol := mat.NewVecDense(df.Nrow(), df.Col("vol").Float())
-	amount := mat.NewVecDense(df.Nrow(), df.Col("amount").Float())
-	buy := mat.NewVecDense(df.Nrow(), df.Col("buy").Float())
-	sell := mat.NewVecDense(df.Nrow(), df.Col("sell").Float())
-
-	buy.SubVec(buy, sell)
-	amount.DivElemVec(amount, vol)
-	amount.MulElemVec(amount, buy)
-	df = df.Mutate(series.New(amount.RawVector().Data, series.Float, "net"))
-
-	// tr mc fmc
-	if common.InSlice("total_share", df.Names()) {
-		price := mat.NewVecDense(df.Nrow(), df.Col("price").Float())
-		totalShare := mat.NewVecDense(df.Nrow(), df.Col("total_share").Float())
-		floatShare := mat.NewVecDense(df.Nrow(), df.Col("float_share").Float())
-
-		totalShare.MulElemVec(price, totalShare)
-		df = df.Mutate(series.New(totalShare.RawVector().Data, series.Float, "mc"))
-
-		totalShare.MulElemVec(price, floatShare)
-		df = df.Mutate(series.New(totalShare.RawVector().Data, series.Float, "fmc"))
-
-		totalShare.DivElemVec(vol, floatShare)
-		totalShare.ScaleVec(10000, totalShare)
-		df = df.Mutate(series.New(totalShare.RawVector().Data, series.Float, "tr"))
-	}
+	avgPrice := Cal(df.Col("amount"), "/", df.Col("vol"))
+	buy := Cal(df.Col("buy"), "-", df.Col("sell"))
+	net := Cal(avgPrice, "*", buy, "net")
+	df = df.Mutate(net).Drop([]string{"buy", "sell"})
 
 	// 主力净流入
 	if common.InSlice("huge_in", df.Names()) && common.InSlice(marketType, []string{"CN", "HK"}) {
-		df = common.Operation(df, "main_huge", "huge_in", "-", "huge_out")
-		df = common.Operation(df, "main_big", "big_in", "-", "big_out")
-		df = common.Operation(df, "main_in", "huge_in", "+", "big_in")
-		df = common.Operation(df, "main_out", "huge_out", "+", "big_out")
-		df = common.Operation(df, "main_net", "main_in", "-", "main_out")
+		res := Cal(df.Col("huge_in"), "-", df.Col("huge_out"), "main_huge")
+		df = df.Mutate(res)
+
+		res = Cal(df.Col("big_in"), "-", df.Col("big_out"), "main_big")
+		df = df.Mutate(res)
+
+		res = Cal(df.Col("huge_in"), "+", df.Col("big_in"), "main_in")
+		df = df.Mutate(res)
+
+		res = Cal(df.Col("huge_out"), "+", df.Col("big_out"), "main_out")
+		df = df.Mutate(res)
+
+		res = Cal(df.Col("main_in"), "-", df.Col("main_out"), "main_net")
+		df = df.Mutate(res)
 
 		df = df.Drop([]string{"huge_in", "huge_out", "big_in", "big_out"})
 	}
-
 	return df
 }
 
-// 下载数据
+// Cal series之间运算
+func Cal(s1 series.Series, operation string, s2 series.Series, name ...string) series.Series {
+	v1 := mat.NewVecDense(s1.Len(), s1.Float())
+	v2 := mat.NewVecDense(s2.Len(), s2.Float())
+
+	switch operation {
+	case "+":
+		v1.AddVec(v1, v2)
+	case "-":
+		v1.SubVec(v1, v2)
+	case "*":
+		v1.MulElemVec(v1, v2)
+	case "/":
+		v1.DivElemVec(v1, v2)
+	}
+
+	if len(name) > 0 {
+		return series.New(v1.RawVector().Data, series.Float, name[0])
+	} else {
+		return series.New(v1.RawVector().Data, series.Float, "x")
+	}
+}
+
+// 下载股票数据
 func getRealStock(marketType string) {
 	url := "https://push2.eastmoney.com/api/qt/clist/get?po=1&fid=f20&pz=4600&np=1&fltt=2&pn=1&fs=" + fs[marketType] + "&fields="
 	var tempUrl string
@@ -186,8 +198,8 @@ func getRealStock(marketType string) {
 		df = calData(df, marketType)
 		UpdateMongo(df.Maps())
 
+		// 更新行业数据
 		if marketType == "CN" {
-			// 间隔更新行业数据
 			if count%10 == 0 {
 				go CalIndustry()
 			}
@@ -195,10 +207,12 @@ func getRealStock(marketType string) {
 		count++
 		MyChan <- marketType
 
-		if count >= MaxCount {
+		// 重置计数器
+		if count > MaxCount {
 			count = 0
 		}
-		for !Status[marketType] {
+
+		for !Status[marketType[0:2]] {
 			count = MaxCount
 			time.Sleep(time.Millisecond * 300)
 		}
@@ -231,10 +245,6 @@ func getMarketStatus() {
 
 			Status[market] = status
 			StatusName[market] = statusName
-			if market == "CN" {
-				Status["Index"] = status
-				StatusName["Index"] = statusName
-			}
 		}
 		// 每秒更新
 		time.Sleep(time.Second * 1)
@@ -245,7 +255,7 @@ func getMarketStatus() {
 func GoDownload() {
 	go getMarketStatus()
 	go getRealStock("CN")
-	go getRealStock("Index")
+	go getRealStock("CNIndex")
 	go getRealStock("HK")
 	go getRealStock("US")
 }

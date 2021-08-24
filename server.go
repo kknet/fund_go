@@ -11,9 +11,6 @@ import (
 
 // 主函数
 func main() {
-	// 监听websocket
-	go api.ListenChan()
-
 	// 启动后台下载
 	download.GoDownload()
 
