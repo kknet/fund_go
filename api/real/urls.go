@@ -25,19 +25,35 @@ func GetChart(c *gin.Context) {
 	}
 }
 
-// GetCList 获取股票列表
-func GetCList(c *gin.Context) {
-	var data []bson.M
+// StickDetail 获取单只股票详细数据
+func StickDetail(c *gin.Context) {
 	// 指定code
-	codes, ok := c.GetQuery("code")
-	if ok {
-		clist := strings.Split(codes, ",")
-		data = GetStockList(clist)
-	} else {
+	code, ok := c.GetQuery("code")
+	if !ok {
 		c.JSON(200, gin.H{
 			"status": false, "msg": "必须指定code参数",
 		})
+		return
 	}
+	data := GetStock(code)
+	c.JSON(200, gin.H{
+		"status": true, "data": data,
+	})
+}
+
+// StockList 获取股票列表
+func StockList(c *gin.Context) {
+	// 指定code
+	code, ok := c.GetQuery("code")
+	if !ok {
+		c.JSON(200, gin.H{
+			"status": false, "msg": "必须指定code参数",
+		})
+		return
+	}
+	codeList := strings.Split(code, ",")
+	data := GetStockList(codeList)
+
 	// 可指定chart, 获取简略图表数据
 	switch c.Query("chart") {
 	case "minute", "trends":
@@ -152,6 +168,7 @@ func GetMembers(c *gin.Context) {
 	})
 }
 
+// GetTicks 获取五档盘口、成交明细
 func GetTicks(c *gin.Context) {
 	code, ok := c.GetQuery("code")
 	if !ok {

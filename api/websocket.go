@@ -19,7 +19,7 @@ var upGrader = websocket.Upgrader{
 
 // 升级协议
 func upGrade(c *gin.Context) (*websocket.Conn, error) {
-	//升级get请求为webSocket协议
+	// 升级get请求为webSocket协议
 	ws, err := upGrader.Upgrade(c.Writer, c.Request, nil)
 	if err != nil {
 		c.JSON(200, gin.H{
@@ -36,31 +36,20 @@ func ConnectCList(c *gin.Context) {
 	if err != nil {
 		return
 	}
-	defer ws.Close()
-
 	// 获取参数
 	code, ok := c.GetQuery("code")
 	if !ok {
 		_ = ws.WriteJSON(bson.M{"msg": "必须指定code参数", "status": false})
 		return
 	}
-
 	codes := strings.Split(code, ",")
-	oldData := real.GetStockList(codes)
-	for {
-		<-download.MyChan
-		newData := real.GetStockList(codes)
-		for i := range newData {
-			if newData[i]["pct_chg"] != oldData[i]["pct_chg"] {
-				oldData[i] = newData[i]
-				// 写入
-				err = ws.WriteJSON(newData[i])
-				if err != nil {
-					return
-				}
-			}
-		}
+
+	conn := &StockListConn{
+		Conn:  newConn(ws),
+		codes: codes,
+		data:  real.GetStockList(codes),
 	}
+	StockListConnList = append(StockListConnList, conn)
 }
 
 // ConnectItems 详情页连接
@@ -69,35 +58,71 @@ func ConnectItems(c *gin.Context) {
 	if err != nil {
 		return
 	}
-	defer ws.Close()
-
 	// 获取参数
 	code, ok := c.GetQuery("code")
 	if !ok {
 		_ = ws.WriteJSON(bson.M{"msg": "必须指定code参数", "status": false})
 		return
 	}
-
-	// 检查代码是否存在
-	check := real.GetStockList([]string{code})
-	if len(check) <= 0 {
-		return
+	// 检查代码合法
+	check := real.GetStock(code)
+	if len(check) > 0 {
+		conn := &StockDetailConn{
+			Conn: newConn(ws),
+			code: code,
+			data: check,
+		}
+		StockDetailConnList = append(StockDetailConnList, conn)
+	} else {
+		_ = ws.WriteJSON(bson.M{"msg": "代码不存在", "status": false})
 	}
+}
 
-	oldData := check[0]
-	for {
-		<-download.MyChan
-		newData := real.GetStockList([]string{code})[0]
-		// 有更新
-		if newData["vol"].(int32) > oldData["vol"].(int32) {
-			// 详情
-			results := real.GetRealTicks(code, 50)
-			results["items"] = newData
-			// 写入
-			err = ws.WriteJSON(results)
-			if err != nil {
-				return
+// SendCList 推送消息
+func SendCList() {
+	for _, c := range StockListConnList {
+		// 获取新数据
+		newData := real.GetStockList(c.codes)
+		for i := range newData {
+			if newData[i]["pct_chg"] != c.data[i]["pct_chg"] {
+				c.data[i] = newData[i]
+
+				// 写入
+				err := c.Conn.Conn.WriteJSON(newData[i])
+				if err != nil {
+					c.Conn.deleteConn()
+				}
 			}
 		}
+	}
+}
+
+// SendItems 推送详情页
+func SendItems() {
+	for _, c := range StockDetailConnList {
+		// 获取新数据
+		newData := real.GetStock(c.code)
+		// 有更新
+		if newData["vol"].(int32) > c.data["vol"].(int32) {
+			// 详情
+			results := real.GetRealTicks(c.code, 50)
+			results["items"] = newData
+			c.data = newData
+
+			// 写入
+			err := c.Conn.Conn.WriteJSON(results)
+			if err != nil {
+				c.Conn.deleteConn()
+			}
+		}
+	}
+}
+
+// ListenChan 监听主函数
+func ListenChan() {
+	for {
+		<-download.MyChan
+		SendItems()
+		SendCList()
 	}
 }

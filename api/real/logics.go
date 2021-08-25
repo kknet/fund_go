@@ -31,62 +31,51 @@ var basicOpt = bson.M{
 	"close": 1, "price": 1, "pct_chg": 1, "amount": 1, "mc": 1, "tr": 1,
 	"net": 1, "main_net": 1, "roe": 1, "income_yoy": 1, "revenue_yoy": 1,
 }
-var allOpt = bson.M{"adj_factor": 0, "_id": 0, "sw_code": 0}
+
+// GetStock 获取单只股票
+func GetStock(code string) bson.M {
+	var data bson.M
+	_ = download.RealColl.Find(ctx, bson.M{"_id": code}).
+		Select(bson.M{"adj_factor": 0, "_id": 0, "sw_code": 0}).One(&data)
+
+	if len(data) <= 0 {
+		return data
+	}
+
+	// 添加行业数据
+	var industry bson.M
+	_ = download.RealColl.Find(ctx, bson.M{"$or": bson.A{
+		bson.M{"name": data["industry"], "type": "industry"},
+		bson.M{"name": data["sw"], "type": "sw"},
+		bson.M{"name": data["area"], "type": "area"},
+	}}).Select(bson.M{"_id": 0, "name": 1, "type": 1, "pct_chg": 1}).One(&industry)
+	for k, v := range industry {
+		data[k] = v
+	}
+	// 添加市场状态
+	marketType := data["marketType"].(string)
+	data["status"] = download.Status[marketType]
+	data["status_name"] = download.StatusName[marketType]
+
+	return data
+}
 
 // GetStockList 获取多只股票信息
 func GetStockList(codes []string) []bson.M {
+	var results []bson.M
+	var data []bson.M
+	_ = download.RealColl.Find(ctx, bson.M{"_id": bson.M{"$in": codes}}).Select(basicOpt).All(&data)
 
-	// 多只股票
-	if len(codes) > 1 {
-		var results []bson.M
-		var data []bson.M
-		_ = download.RealColl.Find(ctx, bson.M{"_id": bson.M{"$in": codes}}).Select(basicOpt).All(&data)
-
-		// 排序
-		for _, c := range codes {
-			for _, item := range data {
-				if c == item["code"] {
-					results = append(results, item)
-					break
-				}
+	// 排序
+	for _, c := range codes {
+		for _, item := range data {
+			if c == item["code"] {
+				results = append(results, item)
+				break
 			}
 		}
-		return results
-
-		// 单只股票
-	} else if len(codes) == 1 {
-		var data bson.M
-		_ = download.RealColl.Find(ctx, bson.M{"_id": codes[0]}).Select(allOpt).One(&data)
-
-		// 添加行业数据
-		group := sync.WaitGroup{}
-		group.Add(3)
-
-		addIndustry := func(ids string) {
-			var info bson.M
-			if data[ids] != nil {
-				_ = download.RealColl.Find(ctx, bson.M{"name": data[ids], "type": ids}).
-					Select(bson.M{"_id": 0, "members": 0, "marketType": 0, "type": 0}).One(&info)
-
-				data[ids] = info
-			}
-			group.Done()
-		}
-		go addIndustry("industry")
-		go addIndustry("sw")
-		go addIndustry("area")
-
-		// 添加市场状态
-		marketType := data["marketType"].(string)
-		data["status"] = download.Status[marketType]
-		data["status_name"] = download.StatusName[marketType]
-
-		group.Wait()
-		return []bson.M{data}
-
-	} else {
-		return []bson.M{}
 	}
+	return results
 }
 
 // AddSimpleMinute 添加简略分时行情

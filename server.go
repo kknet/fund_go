@@ -11,6 +11,9 @@ import (
 
 // 主函数
 func main() {
+	// 监听websocket
+	go api.ListenChan()
+
 	// 启动后台下载
 	download.GoDownload()
 
@@ -28,27 +31,28 @@ func main() {
 	// 创建实例
 	r := gin.Default()
 
-	// ApiV1
+	// api
 	v1 := r.Group("/api/v1")
 	ws := r.Group("/ws")
 
 	// WebSocket
 	wsStock := ws.Group("/stock")
-	wsStock.GET("/clist", api.ConnectCList)
-	wsStock.GET("/items", api.ConnectItems)
+	wsStock.GET("/list", api.ConnectCList)
+	wsStock.GET("/detail", api.ConnectItems)
 
-	// Real 实时数据
-	Real := v1.Group("/stock")
-	Real.GET("/chart/:chart_type", real.GetChart)
-	Real.GET("/market", real.GetMarket)
-	Real.GET("/ticks", real.GetTicks)
+	// Stock 股票数据
+	stock := v1.Group("/stock")
+	stock.GET("/list", real.StockList)
+	stock.GET("/detail", real.StickDetail)
+	stock.GET("/chart/:chart_type", real.GetChart)
+	stock.GET("/ticks", real.GetTicks)
+	stock.GET("/search", real.Search)
 
-	// CList
-	CList := Real.Group("/clist")
-	CList.GET("/get", real.GetCList)
-	CList.GET("/rank", real.GetRank)
-	CList.GET("/search", real.Search)
-	CList.GET("/members", real.GetMembers)
+	// Market 市场数据
+	market := v1.Group("/market")
+	market.GET("/rank", real.GetRank)
+	market.GET("/industry", real.GetMarket)
+	market.GET("/members", real.GetMembers)
 
 	// Fina 财务数据
 	Fina := v1.Group("/fina")
