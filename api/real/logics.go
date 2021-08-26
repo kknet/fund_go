@@ -33,29 +33,40 @@ var basicOpt = bson.M{
 }
 
 // GetStock 获取单只股票
-func GetStock(code string) bson.M {
+func GetStock(code string, detail ...bool) bson.M {
 	var data bson.M
 	_ = download.RealColl.Find(ctx, bson.M{"_id": code}).
-		Select(bson.M{"adj_factor": 0, "_id": 0, "sw_code": 0}).One(&data)
+		Select(bson.M{"_id": 0, "adj_factor": 0, "sw_code": 0}).One(&data)
 
 	if len(data) <= 0 {
 		return data
 	}
 
-	// 添加行业数据
-	var industry bson.M
-	_ = download.RealColl.Find(ctx, bson.M{"$or": bson.A{
-		bson.M{"name": data["industry"], "type": "industry"},
-		bson.M{"name": data["sw"], "type": "sw"},
-		bson.M{"name": data["area"], "type": "area"},
-	}}).Select(bson.M{"_id": 0, "name": 1, "type": 1, "pct_chg": 1}).One(&industry)
-	for k, v := range industry {
-		data[k] = v
+	if len(detail) == 0 {
+		// 添加行业数据
+		var industry []bson.M
+		_ = download.RealColl.Find(ctx, bson.M{"$or": bson.A{
+			bson.M{"name": data["industry"], "type": "industry"},
+			bson.M{"name": data["sw"], "type": "sw"},
+			bson.M{"name": data["area"], "type": "area"},
+		}}).Select(bson.M{"_id": 0, "name": 1, "type": 1, "pct_chg": 1}).All(&industry)
+
+		for _, item := range industry {
+			ids, ok := item["type"].(string)
+			if ok {
+				data[ids] = item
+			}
+		}
+		// 检测申万是否为NaN
+		_, ok := data["sw"].(bson.M)
+		if !ok {
+			data["sw"] = nil
+		}
+		// 添加市场状态
+		marketType := data["marketType"].(string)
+		data["status"] = download.Status[marketType]
+		data["status_name"] = download.StatusName[marketType]
 	}
-	// 添加市场状态
-	marketType := data["marketType"].(string)
-	data["status"] = download.Status[marketType]
-	data["status_name"] = download.StatusName[marketType]
 
 	return data
 }
@@ -82,7 +93,7 @@ func GetStockList(codes []string) []bson.M {
 func AddSimpleMinute(items bson.M) {
 	cid, ok := items["cid"].(string)
 	if !ok {
-		items["chart"] = bson.M{"total": 0, "price": nil, "close": nil}
+		items["chart"] = nil
 		return
 	}
 	var info []string
@@ -188,18 +199,19 @@ func getRank(opt *common.RankOpt) []bson.M {
 
 // GetRealTicks 获取五档挂单明细、分笔成交
 func GetRealTicks(code string, count int) bson.M {
-	cid := GetStockList([]string{code})
-	if len(cid) <= 0 {
+	item := GetStock(code, false)
+	if item == nil {
 		return nil
 	}
+
 	result := bson.M{}
 	group := sync.WaitGroup{}
 	group.Add(2)
 
 	go func() {
 		// CN股票才有盘口数据
-		if cid[0]["marketType"] == "CN" {
-			items := strings.Split(cid[0]["code"].(string), ".")
+		if item["marketType"] == "CN" {
+			items := strings.Split(item["code"].(string), ".")
 			res, _ := http.Get(PanKouUrl + items[1] + items[0])
 			body, _ := ioutil.ReadAll(res.Body)
 			defer res.Body.Close()
@@ -213,7 +225,7 @@ func GetRealTicks(code string, count int) bson.M {
 		group.Done()
 	}()
 	go func() {
-		url := TicksUrl + "&pos=-" + strconv.Itoa(count) + "&secid=" + cid[0]["cid"].(string)
+		url := TicksUrl + "&pos=-" + strconv.Itoa(count) + "&secid=" + item["cid"].(string)
 		res, _ := http.Get(url)
 		body, _ := ioutil.ReadAll(res.Body)
 		defer res.Body.Close()
@@ -300,7 +312,9 @@ func GetMainNetFlow() interface{} {
 func GetIndustryMembers(industryCode string) []bson.M {
 	var members bson.M
 	var data []bson.M
+	// 获取成分股列表
 	_ = download.RealColl.Find(ctx, bson.M{"_id": industryCode}).Select(bson.M{"members": 1}).One(&members)
+	// 获取行情
 	_ = download.RealColl.Find(ctx, bson.M{"_id": bson.M{"$in": members["members"]}}).Select(basicOpt).All(&data)
 
 	return data

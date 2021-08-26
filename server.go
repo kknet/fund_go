@@ -43,7 +43,7 @@ func main() {
 	// Stock 股票数据
 	stock := v1.Group("/stock")
 	stock.GET("/list", real.StockList)
-	stock.GET("/detail", real.StickDetail)
+	stock.GET("/detail", real.StockDetail)
 	stock.GET("/chart/:chart_type", real.GetChart)
 	stock.GET("/ticks", real.GetTicks)
 	stock.GET("/search", real.Search)

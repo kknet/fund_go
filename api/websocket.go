@@ -23,7 +23,7 @@ func upGrade(c *gin.Context) (*websocket.Conn, error) {
 	ws, err := upGrader.Upgrade(c.Writer, c.Request, nil)
 	if err != nil {
 		c.JSON(200, gin.H{
-			"msg": "连接失败", "status": false,
+			"msg": "协议升级失败", "status": false,
 		})
 		return nil, err
 	}
@@ -103,7 +103,7 @@ func SendItems() {
 		// 获取新数据
 		newData := real.GetStock(c.code)
 		// 有更新
-		if newData["vol"].(int32) > c.data["vol"].(int32) {
+		if newData["vol"] != c.data["vol"] {
 			// 详情
 			results := real.GetRealTicks(c.code, 50)
 			results["items"] = newData
