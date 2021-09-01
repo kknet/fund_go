@@ -93,13 +93,15 @@ func GetStockList(codes []string) []bson.M {
 func AddSimpleMinute(items bson.M) {
 	cid, ok := items["cid"].(string)
 	if !ok {
-		items["chart"] = nil
 		return
 	}
 	var info []string
-	res, _ := http.Get(SimpleMinuteUrl + cid)
-	body, _ := ioutil.ReadAll(res.Body)
+	res, err := http.Get(SimpleMinuteUrl + cid)
 	defer res.Body.Close()
+	if err != nil {
+		return
+	}
+	body, _ := ioutil.ReadAll(res.Body)
 
 	total := json.Get(body, "data", "trendsTotal").ToInt()
 	preClose := json.Get(body, "data", "preClose").ToFloat32()
@@ -124,9 +126,13 @@ func AddSimpleMinute(items bson.M) {
 // Add60day 添加60日行情
 func Add60day(items bson.M) {
 	url := "https://push2his.eastmoney.com/api/qt/stock/kline/get?fields1=f1,f6&fields2=f51,f53&klt=101&fqt=0&end=20500101&lmt=60&secid="
-	res, _ := http.Get(url + items["cid"].(string))
-	body, _ := ioutil.ReadAll(res.Body)
+	res, err := http.Get(url + items["cid"].(string))
 	defer res.Body.Close()
+	// 错误判断
+	if err != nil {
+		return
+	}
+	body, _ := ioutil.ReadAll(res.Body)
 
 	var info []string
 	preClose := json.Get(body, "data", "preKPrice").ToFloat32()
@@ -212,9 +218,14 @@ func GetRealTicks(code string, count int) bson.M {
 		// CN股票才有盘口数据
 		if item["marketType"] == "CN" {
 			items := strings.Split(item["code"].(string), ".")
-			res, _ := http.Get(PanKouUrl + items[1] + items[0])
-			body, _ := ioutil.ReadAll(res.Body)
+
+			res, err := http.Get(PanKouUrl + items[1] + items[0])
 			defer res.Body.Close()
+			if err != nil {
+				result["pankou"] = nil
+				return
+			}
+			body, _ := ioutil.ReadAll(res.Body)
 
 			var data bson.M
 			json.Get(body, "data").ToVal(&data)
@@ -226,9 +237,14 @@ func GetRealTicks(code string, count int) bson.M {
 	}()
 	go func() {
 		url := TicksUrl + "&pos=-" + strconv.Itoa(count) + "&secid=" + item["cid"].(string)
-		res, _ := http.Get(url)
-		body, _ := ioutil.ReadAll(res.Body)
+
+		res, err := http.Get(url)
 		defer res.Body.Close()
+		if err != nil {
+			result["ticks"] = nil
+			return
+		}
+		body, _ := ioutil.ReadAll(res.Body)
 
 		var info []string
 		json.Get(body, "data", "details").ToVal(&info)
