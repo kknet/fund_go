@@ -28,8 +28,12 @@ func main() {
 	//gin.DefaultWriter = io.MultiWriter(f)
 	//
 	//gin.SetMode(gin.ReleaseMode)
+
 	// 创建实例
 	r := gin.Default()
+
+	// 性能优化
+	//pprof.Register(r)
 
 	// api
 	v1 := r.Group("/api/v1")
@@ -59,9 +63,14 @@ func main() {
 	Fina.GET("/get", fina.GetFina)
 	Fina.GET("/filter", fina.Filter)
 
+	// 首页
+	r.GET("/", func(c *gin.Context) {
+		c.String(http.StatusOK, "Hello World!")
+	})
+
 	// 错误处理
-	r.NoRoute(func(context *gin.Context) {
-		context.JSON(http.StatusNotFound, gin.H{"status": 404, "msg": "未找到该页面"})
+	r.NoRoute(func(c *gin.Context) {
+		c.JSON(http.StatusNotFound, gin.H{"status": 404, "msg": "未找到该页面"})
 	})
 
 	// 启动

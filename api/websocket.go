@@ -82,7 +82,7 @@ func ConnectItems(c *gin.Context) {
 func SendCList() {
 	for _, c := range StockListConnList {
 		// 获取新数据
-		newData := real.GetStockList(c.codes)
+		newData := real.GetStockList(c.codes, false)
 		for i := range newData {
 			if newData[i]["pct_chg"] != c.data[i]["pct_chg"] {
 				c.data[i] = newData[i]

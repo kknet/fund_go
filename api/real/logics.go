@@ -17,7 +17,7 @@ import (
 
 const (
 	SimpleMinuteUrl = "https://push2.eastmoney.com/api/qt/stock/trends2/get?fields1=f1,f5,f8,f10,f11&fields2=f53&iscr=0&secid="
-	PanKouUrl       = "https://stock.xueqiu.com/v5/stock/realtime/pankou.json?&symbol="
+	PanKouUrl       = "https://push2.eastmoney.com/api/qt/stock/get?fltt=2&fields=f44,f45,f58,f530&secid="
 	TicksUrl        = "https://push2.eastmoney.com/api/qt/stock/details/get?fields1=f1&fields2=f51,f52,f53,f55"
 )
 
@@ -30,6 +30,11 @@ var basicOpt = bson.M{
 	"_id": 0, "cid": 1, "code": 1, "name": 1, "type": 1, "marketType": 1,
 	"close": 1, "price": 1, "pct_chg": 1, "amount": 1, "mc": 1, "tr": 1,
 	"net": 1, "main_net": 1, "roe": 1, "income_yoy": 1, "revenue_yoy": 1,
+}
+
+var searchOpt = bson.M{
+	"_id": 0, "code": 1, "name": 1, "type": 1, "marketType": 1,
+	"price": 1, "pct_chg": 1, "amount": 1,
 }
 
 // GetStock 获取单只股票
@@ -72,10 +77,20 @@ func GetStock(code string, detail ...bool) bson.M {
 }
 
 // GetStockList 获取多只股票信息
-func GetStockList(codes []string) []bson.M {
+func GetStockList(codes []string, detail ...bool) []bson.M {
 	var results []bson.M
 	var data []bson.M
-	_ = download.RealColl.Find(ctx, bson.M{"_id": bson.M{"$in": codes}}).Select(basicOpt).All(&data)
+
+	if len(detail) == 0 {
+		_ = download.RealColl.Find(ctx, bson.M{"_id": bson.M{"$in": codes}}).Select(basicOpt).All(&data)
+
+		// 自选表 简略数据
+	} else {
+		_ = download.RealColl.Find(ctx, bson.M{"_id": bson.M{"$in": codes}}).Select(bson.M{
+			"_id": 0, "code": 1, "price": 1, "pct_chg": 1,
+			"vol": 1, "amount": 1, "net": 1, "main_net": 1,
+		}).All(&data)
+	}
 
 	// 排序
 	for _, c := range codes {
@@ -163,7 +178,7 @@ func search(input string) []bson.M {
 				bson.M{"_id": bson.M{"$regex": matchStr, "$options": "i"}},
 				bson.M{"name": bson.M{"$regex": matchStr, "$options": "i"}},
 			},
-		}).Sort("-amount").Select(basicOpt).Limit(10).All(&temp)
+		}).Sort("-amount").Select(searchOpt).Limit(10).All(&temp)
 		results = append(results, temp...)
 
 		if len(results) >= 10 {
@@ -179,7 +194,7 @@ func search(input string) []bson.M {
 			bson.M{"_id": bson.M{"$regex": matchStr, "$options": "i"}},
 			bson.M{"name": bson.M{"$regex": matchStr, "$options": "i"}},
 		},
-	}).Sort("-amount").Select(basicOpt).Limit(10).All(&temp)
+	}).Sort("-amount").Select(searchOpt).Limit(10).All(&temp)
 	results = append(results, temp...)
 
 	if len(results) >= 10 {
@@ -217,9 +232,7 @@ func GetRealTicks(code string, count int) bson.M {
 	go func() {
 		// CN股票才有盘口数据
 		if item["marketType"] == "CN" {
-			items := strings.Split(item["code"].(string), ".")
-
-			res, err := http.Get(PanKouUrl + items[1] + items[0])
+			res, err := http.Get(PanKouUrl + item["cid"].(string))
 			defer res.Body.Close()
 			if err != nil {
 				result["pankou"] = nil

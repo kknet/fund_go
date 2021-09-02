@@ -154,7 +154,7 @@ func Cal(s1 series.Series, operation string, s2 series.Series, name ...string) s
 
 // 下载股票数据
 func getRealStock(marketType string) {
-	url := "https://push2.eastmoney.com/api/qt/clist/get?po=1&fid=f20&pz=4600&np=1&fltt=2&pn=1&fs=" + fs[marketType] + "&fields="
+	url := "https://push2.eastmoney.com/api/qt/clist/get?po=1&fid=f20&pz=5000&np=1&fltt=2&pn=1&fs=" + fs[marketType] + "&fields="
 	var tempUrl string
 	// 定时更新计数器
 	var count = MaxCount
