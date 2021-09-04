@@ -37,6 +37,10 @@ func UpdateMongo(items []map[string]interface{}) {
 	group.Add(3)
 
 	myFunc := func(s []map[string]interface{}) {
+		if len(s) == 0 {
+			group.Done()
+			return
+		}
 		myBulk := RealColl.Bulk()
 
 		// 初始化事务：写入数据

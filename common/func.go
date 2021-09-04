@@ -19,11 +19,11 @@ func GoFunc(data []bson.M, myFunc func(m bson.M)) []bson.M {
 	group := sync.WaitGroup{}
 	group.Add(len(data))
 
-	for _, item := range data {
+	for i := range data {
 		go func(item bson.M) {
 			myFunc(item)
 			group.Done()
-		}(item)
+		}(data[i])
 	}
 	group.Wait()
 	return data

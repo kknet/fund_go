@@ -17,8 +17,9 @@ import (
 
 const (
 	SimpleMinuteUrl = "https://push2.eastmoney.com/api/qt/stock/trends2/get?fields1=f1,f5,f8,f10,f11&fields2=f53&iscr=0&secid="
-	PanKouUrl       = "https://push2.eastmoney.com/api/qt/stock/get?fltt=2&fields=f44,f45,f58,f530&secid="
+	PanKouUrl       = "https://push2.eastmoney.com/api/qt/stock/get?fltt=2&fields=f58,f530,f135,f136,f137,f138,f139,f141,f142,f144,f145,f147,f148,f140,f143,f146,f149&secid="
 	TicksUrl        = "https://push2.eastmoney.com/api/qt/stock/details/get?fields1=f1&fields2=f51,f52,f53,f55"
+	MoneyFlowUrl    = "https://push2.eastmoney.com/api/qt/stock/fflow/kline/get?lmt=0&klt=1&fields1=f1&fields2=f51,f52,f53,f54,f55,f56&secid="
 )
 
 // jsoniter
@@ -39,7 +40,7 @@ var searchOpt = bson.M{
 
 // GetStock 获取单只股票
 func GetStock(code string, detail ...bool) bson.M {
-	var data bson.M
+	data := bson.M{}
 	_ = download.RealColl.Find(ctx, bson.M{"_id": code}).
 		Select(bson.M{"_id": 0, "adj_factor": 0, "sw_code": 0}).One(&data)
 
@@ -78,8 +79,8 @@ func GetStock(code string, detail ...bool) bson.M {
 
 // GetStockList 获取多只股票信息
 func GetStockList(codes []string, detail ...bool) []bson.M {
-	var results []bson.M
-	var data []bson.M
+	results := make([]bson.M, 0)
+	data := make([]bson.M, 0)
 
 	if len(detail) == 0 {
 		_ = download.RealColl.Find(ctx, bson.M{"_id": bson.M{"$in": codes}}).Select(basicOpt).All(&data)
@@ -221,18 +222,18 @@ func getRank(opt *common.RankOpt) []bson.M {
 // GetRealTicks 获取五档挂单明细、分笔成交
 func GetRealTicks(code string, count int) bson.M {
 	item := GetStock(code, false)
-	if item == nil {
-		return nil
-	}
-
 	result := bson.M{}
+
+	cid, ok := item["cid"].(string)
+	if !ok {
+		return result
+	}
 	group := sync.WaitGroup{}
 	group.Add(2)
 
 	go func() {
-		// CN股票才有盘口数据
-		if item["marketType"] == "CN" {
-			res, err := http.Get(PanKouUrl + item["cid"].(string))
+		if item["marketType"] == "CN" || item["marketType"] == "HK" {
+			res, err := http.Get(PanKouUrl + cid)
 			defer res.Body.Close()
 			if err != nil {
 				result["pankou"] = nil
@@ -249,7 +250,7 @@ func GetRealTicks(code string, count int) bson.M {
 		group.Done()
 	}()
 	go func() {
-		url := TicksUrl + "&pos=-" + strconv.Itoa(count) + "&secid=" + item["cid"].(string)
+		url := TicksUrl + "&pos=-" + strconv.Itoa(count) + "&secid=" + cid
 
 		res, err := http.Get(url)
 		defer res.Body.Close()

@@ -28,7 +28,7 @@ var Status = map[string]bool{
 	"CN": false, "HK": false, "US": false,
 }
 
-// StatusName 市场状态描述：盘前交易、交易中、休市中、 已收盘、休市
+// StatusName 市场状态描述：盘前交易、交易中、休市中、已收盘、休市
 var StatusName = map[string]string{
 	"CN": "", "HK": "", "US": "",
 }
@@ -59,9 +59,7 @@ var basicName = map[string]string{
 var proName = map[string]string{
 	"f12": "code", "f2": "price", "f15": "high", "f16": "low", "f3": "pct_chg",
 	"f5": "vol", "f6": "amount", "f33": "wb", "f34": "buy", "f35": "sell",
-	"f64": "huge_in", "f65": "huge_out",
-	"f70": "big_in", "f71": "big_out",
-	"f78": "main_mid", "f84": "main_small",
+	"f62": "main_net",
 }
 
 // 初始化全局通道
@@ -95,6 +93,8 @@ func calData(df dataframe.DataFrame, marketType string) dataframe.DataFrame {
 			code[i] += Expression(code[i][0] == '6', ".SH", ".SZ").(string)
 		case "CNIndex":
 			code[i] += Expression(code[i][0] == '0', ".SH", ".SZ").(string)
+		case "HKIndex", "USIndex":
+			code[i] += "." + marketType[0:2]
 		case "HK", "US":
 			code[i] += "." + marketType
 		}
@@ -107,25 +107,6 @@ func calData(df dataframe.DataFrame, marketType string) dataframe.DataFrame {
 	net := Cal(avgPrice, "*", buy, "net")
 	df = df.Mutate(net).Drop([]string{"buy", "sell"})
 
-	// 主力净流入
-	if common.InSlice("huge_in", df.Names()) && common.InSlice(marketType, []string{"CN", "HK"}) {
-		res := Cal(df.Col("huge_in"), "-", df.Col("huge_out"), "main_huge")
-		df = df.Mutate(res)
-
-		res = Cal(df.Col("big_in"), "-", df.Col("big_out"), "main_big")
-		df = df.Mutate(res)
-
-		res = Cal(df.Col("huge_in"), "+", df.Col("big_in"), "main_in")
-		df = df.Mutate(res)
-
-		res = Cal(df.Col("huge_out"), "+", df.Col("big_out"), "main_out")
-		df = df.Mutate(res)
-
-		res = Cal(df.Col("main_in"), "-", df.Col("main_out"), "main_net")
-		df = df.Mutate(res)
-
-		df = df.Drop([]string{"huge_in", "huge_out", "big_in", "big_out"})
-	}
 	return df
 }
 
@@ -155,6 +136,12 @@ func Cal(s1 series.Series, operation string, s2 series.Series, name ...string) s
 // 下载股票数据
 func getRealStock(marketType string) {
 	url := "https://push2.eastmoney.com/api/qt/clist/get?po=1&fid=f20&pz=5000&np=1&fltt=2&pn=1&fs=" + fs[marketType] + "&fields="
+	// HK US指数
+	if marketType == "HKIndex" {
+		url = "https://push2.eastmoney.com/api/qt/ulist.np/get?secids=100.HSI,100.HSCEI,124.HSCCI&fltt=2&fields="
+	} else if marketType == "USIndex" {
+		url = "https://push2.eastmoney.com/api/qt/ulist.np/get?secids=100.DJIA,100.SPX,100.NDX&fltt=2&fields="
+	}
 	var tempUrl string
 	// 定时更新计数器
 	var count = MaxCount
@@ -258,4 +245,6 @@ func GoDownload() {
 	go getRealStock("CNIndex")
 	go getRealStock("HK")
 	go getRealStock("US")
+	go getRealStock("HKIndex")
+	go getRealStock("USIndex")
 }
