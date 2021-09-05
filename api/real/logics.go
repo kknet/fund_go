@@ -19,7 +19,7 @@ const (
 	SimpleMinuteUrl = "https://push2.eastmoney.com/api/qt/stock/trends2/get?fields1=f1,f5,f8,f10,f11&fields2=f53&iscr=0&secid="
 	PanKouUrl       = "https://push2.eastmoney.com/api/qt/stock/get?fltt=2&fields=f58,f530,f135,f136,f137,f138,f139,f141,f142,f144,f145,f147,f148,f140,f143,f146,f149&secid="
 	TicksUrl        = "https://push2.eastmoney.com/api/qt/stock/details/get?fields1=f1&fields2=f51,f52,f53,f55"
-	MoneyFlowUrl    = "https://push2.eastmoney.com/api/qt/stock/fflow/kline/get?lmt=0&klt=1&fields1=f1&fields2=f51,f52,f53,f54,f55,f56&secid="
+	MoneyFlowUrl    = "https://push2.eastmoney.com/api/qt/stock/fflow/kline/get?lmt=0&klt=1&fields1=f1&fields2=f53,f54,f55,f56&secid="
 )
 
 // jsoniter
@@ -335,6 +335,35 @@ func GetMainNetFlow() interface{} {
 		"mid":      df.Col("mid").Float(),
 		"big":      df.Col("big").Float(),
 		"huge":     df.Col("huge").Float(),
+	}
+}
+
+// GetDetailMoneyFlow 获取资金博弈走势
+func GetDetailMoneyFlow(code string) interface{} {
+	item := GetStock(code, false)
+	cid, ok := item["cid"].(string)
+	if !ok {
+		return nil
+	}
+	res, err := http.Get(MoneyFlowUrl + cid)
+	body, _ := ioutil.ReadAll(res.Body)
+	defer res.Body.Close()
+	if err != nil {
+		return nil
+	}
+
+	var str []string
+	json.Get(body, "data", "klines").ToVal(&str)
+	if len(str) == 0 {
+		return nil
+	}
+
+	df := dataframe.ReadCSV(strings.NewReader("small,mid,big,huge\n" + strings.Join(str, "\n")))
+	return bson.M{
+		"small": df.Col("small").Float(),
+		"mid":   df.Col("mid").Float(),
+		"big":   df.Col("big").Float(),
+		"huge":  df.Col("huge").Float(),
 	}
 }
 

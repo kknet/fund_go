@@ -18,6 +18,18 @@ func GetChart(c *gin.Context) {
 		c.JSON(200, gin.H{
 			"status": true, "data": data,
 		})
+	case "detail_money":
+		code, ok := c.GetQuery("code")
+		if !ok {
+			c.JSON(200, gin.H{
+				"status": false, "msg": "必须指定code参数",
+			})
+			return
+		}
+		data := GetDetailMoneyFlow(code)
+		c.JSON(200, gin.H{
+			"status": true, "data": data,
+		})
 	default:
 		c.JSON(200, gin.H{
 			"status": false, "msg": "该页面不存在",
