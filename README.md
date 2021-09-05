@@ -36,16 +36,17 @@ https://lucario.ltd
 
 ### 1. Django（python）
 
-1. 使用Django web框架
-2. 股票数据的聚合、计算使用pandas、numpy科学计算库
+1. 使用Django restframework框架
+2. 行情数据的聚合、计算使用pandas、numpy科学计算库
 3. 低频更新数据使用postgres存储，高频实时数据使用MongoDB存储
+4. 设置定时脚本每日更新数据库
 
 
 
 ## 2. Golang
 
 1. 使用gin web框架
-2. 使用websocket实时推送最新数据
+2. 使用websocket实时推送最新数据，定义websocket连接列表
 3. 实时数据使用dataframe-go、gonum计算，并用MongoDB存储，便于与python联动
 
 
@@ -55,9 +56,4 @@ https://lucario.ltd
 1. 使用vue3.0、vue-router路由插件、vuex状态管理插件等
 2. 使用[Element-plus](https://element-plus.gitee.io/#/zh-CN)、[Vant](https://vant-contrib.gitee.io/vant/v3/#/zh-CN)组件库
 3. 图表绘制使用[ECharts](https://echarts.apache.org/zh/index.html)
-4. 保留页面缓存，减少加载时间
-
-
-
-## 四、网站截图
-
+4. 缓存页面，减少加载时间
