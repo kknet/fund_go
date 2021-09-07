@@ -2,14 +2,13 @@ package real
 
 import (
 	"context"
+	apiV1 "fund_go2/api"
 	"fund_go2/common"
 	"fund_go2/download"
 	"github.com/go-gota/gota/dataframe"
 	"github.com/go-gota/gota/series"
 	jsoniter "github.com/json-iterator/go"
 	"go.mongodb.org/mongo-driver/bson"
-	"io/ioutil"
-	"net/http"
 	"strconv"
 	"strings"
 	"sync"
@@ -17,6 +16,7 @@ import (
 
 const (
 	SimpleMinuteUrl = "https://push2.eastmoney.com/api/qt/stock/trends2/get?fields1=f1,f5,f8,f10,f11&fields2=f53&iscr=0&secid="
+	Day60Url        = "https://push2.eastmoney.com/api/qt/stock/kline/get?fields1=f1,f6&fields2=f51,f53&klt=101&fqt=0&end=20500101&lmt=60&secid="
 	PanKouUrl       = "https://push2.eastmoney.com/api/qt/stock/get?fltt=2&fields=f58,f530,f135,f136,f137,f138,f139,f141,f142,f144,f145,f147,f148,f140,f143,f146,f149&secid="
 	TicksUrl        = "https://push2.eastmoney.com/api/qt/stock/details/get?fields1=f1&fields2=f51,f52,f53,f55"
 	MoneyFlowUrl    = "https://push2.eastmoney.com/api/qt/stock/fflow/kline/get?lmt=0&klt=1&fields1=f1&fields2=f53,f54,f55,f56&secid="
@@ -112,12 +112,11 @@ func AddSimpleMinute(items bson.M) {
 		return
 	}
 	var info []string
-	res, err := http.Get(SimpleMinuteUrl + cid)
-	defer res.Body.Close()
+
+	body, err := apiV1.GetAndRead(SimpleMinuteUrl + cid)
 	if err != nil {
 		return
 	}
-	body, _ := ioutil.ReadAll(res.Body)
 
 	total := json.Get(body, "data", "trendsTotal").ToInt()
 	preClose := json.Get(body, "data", "preClose").ToFloat32()
@@ -141,14 +140,10 @@ func AddSimpleMinute(items bson.M) {
 
 // Add60day 添加60日行情
 func Add60day(items bson.M) {
-	url := "https://push2his.eastmoney.com/api/qt/stock/kline/get?fields1=f1,f6&fields2=f51,f53&klt=101&fqt=0&end=20500101&lmt=60&secid="
-	res, err := http.Get(url + items["cid"].(string))
-	defer res.Body.Close()
-	// 错误判断
+	body, err := apiV1.GetAndRead(Day60Url + items["cid"].(string))
 	if err != nil {
 		return
 	}
-	body, _ := ioutil.ReadAll(res.Body)
 
 	var info []string
 	preClose := json.Get(body, "data", "preKPrice").ToFloat32()
@@ -233,13 +228,11 @@ func GetRealTicks(code string, count int) bson.M {
 
 	go func() {
 		if item["marketType"] == "CN" || item["marketType"] == "HK" {
-			res, err := http.Get(PanKouUrl + cid)
-			defer res.Body.Close()
+			body, err := apiV1.GetAndRead(PanKouUrl + cid)
 			if err != nil {
 				result["pankou"] = nil
 				return
 			}
-			body, _ := ioutil.ReadAll(res.Body)
 
 			var data bson.M
 			json.Get(body, "data").ToVal(&data)
@@ -252,14 +245,11 @@ func GetRealTicks(code string, count int) bson.M {
 	go func() {
 		url := TicksUrl + "&pos=-" + strconv.Itoa(count) + "&secid=" + cid
 
-		res, err := http.Get(url)
-		defer res.Body.Close()
+		body, err := apiV1.GetAndRead(url)
 		if err != nil {
 			result["ticks"] = nil
 			return
 		}
-		body, _ := ioutil.ReadAll(res.Body)
-
 		var info []string
 		json.Get(body, "data", "details").ToVal(&info)
 
@@ -316,28 +306,6 @@ func getNumbers(marketType string) bson.M {
 	return bson.M{"label": label, "value": num}
 }
 
-// GetMainNetFlow 获取大盘主力资金流向
-func GetMainNetFlow() interface{} {
-	url := "https://push2.eastmoney.com/api/qt/stock/fflow/kline/get?lmt=0&klt=1&fields1=f1,f2,f3&fields2=f51,f52,f53,f54,f55,f56&secid=1.000001&secid2=0.399001"
-	res, _ := http.Get(url)
-	body, _ := ioutil.ReadAll(res.Body)
-	defer res.Body.Close()
-
-	var str []string
-	json.Get(body, "data", "klines").ToVal(&str)
-
-	df := dataframe.ReadCSV(strings.NewReader("time,main_net,small,mid,big,huge\n" + strings.Join(str, "\n")))
-
-	return bson.M{
-		"time":     df.Col("time").Records(),
-		"main_net": df.Col("main_net").Float(),
-		"small":    df.Col("small").Float(),
-		"mid":      df.Col("mid").Float(),
-		"big":      df.Col("big").Float(),
-		"huge":     df.Col("huge").Float(),
-	}
-}
-
 // GetDetailMoneyFlow 获取资金博弈走势
 func GetDetailMoneyFlow(code string) interface{} {
 	item := GetStock(code, false)
@@ -345,9 +313,8 @@ func GetDetailMoneyFlow(code string) interface{} {
 	if !ok {
 		return nil
 	}
-	res, err := http.Get(MoneyFlowUrl + cid)
-	body, _ := ioutil.ReadAll(res.Body)
-	defer res.Body.Close()
+
+	body, err := apiV1.GetAndRead(MoneyFlowUrl + cid)
 	if err != nil {
 		return nil
 	}

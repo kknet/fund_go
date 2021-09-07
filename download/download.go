@@ -1,14 +1,12 @@
 package download
 
 import (
+	api "fund_go2/api"
 	"fund_go2/common"
 	"github.com/go-gota/gota/dataframe"
 	"github.com/go-gota/gota/series"
 	jsoniter "github.com/json-iterator/go"
-	"gonum.org/v1/gonum/mat"
-	"io/ioutil"
 	"log"
-	"net/http"
 	"strings"
 	"sync"
 	"time"
@@ -74,16 +72,16 @@ func getGlobalChan() chan string {
 }
 
 // 计算股票指标
-func calData(df dataframe.DataFrame, marketType string) dataframe.DataFrame {
+func calData(df Dataframe, marketType string) Dataframe {
 
 	code := df.Col("code").Records()
 	// cid
-	if common.InSlice("cid", df.Names()) {
+	if df.ColIn("cid") {
 		cid := df.Col("cid").Records()
 		for i := range cid {
 			cid[i] += "." + code[i]
 		}
-		df = df.Mutate(series.New(cid, series.String, "cid"))
+		df.Mutate(series.New(cid, series.String, "cid"))
 	}
 
 	// code
@@ -93,59 +91,28 @@ func calData(df dataframe.DataFrame, marketType string) dataframe.DataFrame {
 			code[i] += Expression(code[i][0] == '6', ".SH", ".SZ").(string)
 		case "CNIndex":
 			code[i] += Expression(code[i][0] == '0', ".SH", ".SZ").(string)
-		case "HKIndex", "USIndex":
-			code[i] += "." + marketType[0:2]
 		case "HK", "US":
 			code[i] += "." + marketType
 		}
 	}
-	df = df.Mutate(series.New(code, series.String, "code"))
+	df.Mutate(series.New(code, series.String, "code"))
 
 	// net
-	avgPrice := Cal(df.Col("amount"), "/", df.Col("vol"))
-	buy := Cal(df.Col("buy"), "-", df.Col("sell"))
-	net := Cal(avgPrice, "*", buy, "net")
-	df = df.Mutate(net).Drop([]string{"buy", "sell"})
+	avgPrice := df.Cal(df.Col("amount"), "/", df.Col("vol"))
+	buy := df.Cal(df.Col("buy"), "-", df.Col("sell"))
+	df.CalAndSet(avgPrice, "*", buy, "net")
+	df.Drop([]string{"buy", "sell"})
 
 	return df
-}
-
-// Cal series之间运算
-func Cal(s1 series.Series, operation string, s2 series.Series, name ...string) series.Series {
-	v1 := mat.NewVecDense(s1.Len(), s1.Float())
-	v2 := mat.NewVecDense(s2.Len(), s2.Float())
-
-	switch operation {
-	case "+":
-		v1.AddVec(v1, v2)
-	case "-":
-		v1.SubVec(v1, v2)
-	case "*":
-		v1.MulElemVec(v1, v2)
-	case "/":
-		v1.DivElemVec(v1, v2)
-	}
-
-	if len(name) > 0 {
-		return series.New(v1.RawVector().Data, series.Float, name[0])
-	} else {
-		return series.New(v1.RawVector().Data, series.Float, "x")
-	}
 }
 
 // 下载股票数据
 func getRealStock(marketType string) {
 	url := "https://push2.eastmoney.com/api/qt/clist/get?po=1&fid=f20&pz=5000&np=1&fltt=2&pn=1&fs=" + fs[marketType] + "&fields="
-	// HK US指数
-	if marketType == "HKIndex" {
-		url = "https://push2.eastmoney.com/api/qt/ulist.np/get?secids=100.HSI,100.HSCEI,124.HSCCI&fltt=2&fields="
-	} else if marketType == "USIndex" {
-		url = "https://push2.eastmoney.com/api/qt/ulist.np/get?secids=100.DJIA,100.SPX,100.NDX&fltt=2&fields="
-	}
 	var tempUrl string
 	// 定时更新计数器
 	var count = MaxCount
-	client := &http.Client{}
+	client := api.NewRequest()
 	for {
 		// 连接参数
 		tempUrl = url + common.JoinMapKeys(proName, ",")
@@ -156,31 +123,24 @@ func getRealStock(marketType string) {
 			tempUrl += "," + common.JoinMapKeys(lowName, ",")
 		}
 
-		res, err := client.Get(tempUrl)
+		body, err := client.DoAndRead(tempUrl)
 		if err != nil {
 			log.Println("下载股票数据失败，3秒后重试...", err.Error())
 			time.Sleep(time.Second * 3)
 			continue
 		}
-		body, _ := ioutil.ReadAll(res.Body)
 		str := json.Get(body, "data", "diff").ToString()
-		_ = res.Body.Close()
 
-		df := dataframe.ReadJSON(strings.NewReader(str), dataframe.WithTypes(map[string]series.Type{
+		t := dataframe.ReadJSON(strings.NewReader(str), dataframe.WithTypes(map[string]series.Type{
 			"f12": series.String, "f13": series.String,
 		}))
+		// 用自定义的Dataframe加载
+		df := Dataframe{t}
 
 		// 重命名
-		for _, col := range df.Names() {
-			newName, ok := proName[col]
-			if !ok {
-				newName, ok = basicName[col]
-				if !ok {
-					newName = lowName[col]
-				}
-			}
-			df = df.Rename(newName, col)
-		}
+		df.RenameDict(proName)
+		df.RenameDict(basicName)
+		df.RenameDict(lowName)
 
 		df = calData(df, marketType)
 		UpdateMongo(df.Maps())
@@ -210,18 +170,15 @@ func getRealStock(marketType string) {
 // 获取市场交易状态
 func getMarketStatus() {
 	url := "https://xueqiu.com/service/v5/stock/batch/quote?symbol=SH000001,HKHSI,.IXIC"
-	client := &http.Client{}
+	client := api.NewRequest()
 	for {
-		res, err := client.Get(url)
+		body, err := client.DoAndRead(url)
 		if err != nil {
 			log.Println("更新市场状态失败，3秒后重试...", err.Error())
 			time.Sleep(time.Second * 3)
 			continue
 		}
-
-		body, _ := ioutil.ReadAll(res.Body)
 		items := json.Get(body, "data", "items").ToString()
-		_ = res.Body.Close()
 
 		// 设置CN，HK，US市场状态
 		for i := 0; i < 3; i++ {
@@ -245,6 +202,4 @@ func GoDownload() {
 	go getRealStock("CNIndex")
 	go getRealStock("HK")
 	go getRealStock("US")
-	go getRealStock("HKIndex")
-	go getRealStock("USIndex")
 }

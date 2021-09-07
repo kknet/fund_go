@@ -13,11 +13,6 @@ import (
 func GetChart(c *gin.Context) {
 	chartType := c.Param("chart_type")
 	switch chartType {
-	case "main_net":
-		data := GetMainNetFlow()
-		c.JSON(200, gin.H{
-			"status": true, "data": data,
-		})
 	case "detail_money":
 		code, ok := c.GetQuery("code")
 		if !ok {
