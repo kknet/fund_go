@@ -2,7 +2,6 @@ package real
 
 import (
 	"context"
-	apiV1 "fund_go2/api"
 	"fund_go2/common"
 	"fund_go2/download"
 	"github.com/go-gota/gota/dataframe"
@@ -15,8 +14,8 @@ import (
 )
 
 const (
-	SimpleMinuteUrl = "https://push2.eastmoney.com/api/qt/stock/trends2/get?fields1=f1,f5,f8,f10,f11&fields2=f53&iscr=0&secid="
-	Day60Url        = "https://push2.eastmoney.com/api/qt/stock/kline/get?fields1=f1,f6&fields2=f51,f53&klt=101&fqt=0&end=20500101&lmt=60&secid="
+	SimpleMinuteUrl = "https://push2.eastmoney.com/api/qt/stock/trends2/get?fields1=f10,f11&fields2=f53&iscr=0&secid="
+	Day60Url        = "https://push2his.eastmoney.com/api/qt/stock/kline/get?fields1=f1,f6&fields2=f51,f53&klt=101&fqt=0&end=20500101&lmt=60&secid="
 	PanKouUrl       = "https://push2.eastmoney.com/api/qt/stock/get?fltt=2&fields=f58,f530,f135,f136,f137,f138,f139,f141,f142,f144,f145,f147,f148,f140,f143,f146,f149&secid="
 	TicksUrl        = "https://push2.eastmoney.com/api/qt/stock/details/get?fields1=f1&fields2=f51,f52,f53,f55"
 	MoneyFlowUrl    = "https://push2.eastmoney.com/api/qt/stock/fflow/kline/get?lmt=0&klt=1&fields1=f1&fields2=f53,f54,f55,f56&secid="
@@ -113,13 +112,12 @@ func AddSimpleMinute(items bson.M) {
 	}
 	var info []string
 
-	body, err := apiV1.GetAndRead(SimpleMinuteUrl + cid)
+	body, err := common.GetAndRead(SimpleMinuteUrl + cid)
 	if err != nil {
 		return
 	}
 
 	total := json.Get(body, "data", "trendsTotal").ToInt()
-	preClose := json.Get(body, "data", "preClose").ToFloat32()
 	json.Get(body, "data", "trends").ToVal(&info)
 
 	// 间隔
@@ -134,13 +132,13 @@ func AddSimpleMinute(items bson.M) {
 	results = append(results, items["price"].(float64))
 
 	items["chart"] = bson.M{
-		"total": total / space, "price": results, "close": preClose,
+		"total": total / space, "price": results,
 	}
 }
 
 // Add60day 添加60日行情
 func Add60day(items bson.M) {
-	body, err := apiV1.GetAndRead(Day60Url + items["cid"].(string))
+	body, err := common.GetAndRead(Day60Url + items["cid"].(string))
 	if err != nil {
 		return
 	}
@@ -228,7 +226,7 @@ func GetRealTicks(code string, count int) bson.M {
 
 	go func() {
 		if item["marketType"] == "CN" || item["marketType"] == "HK" {
-			body, err := apiV1.GetAndRead(PanKouUrl + cid)
+			body, err := common.GetAndRead(PanKouUrl + cid)
 			if err != nil {
 				result["pankou"] = nil
 				return
@@ -245,7 +243,7 @@ func GetRealTicks(code string, count int) bson.M {
 	go func() {
 		url := TicksUrl + "&pos=-" + strconv.Itoa(count) + "&secid=" + cid
 
-		body, err := apiV1.GetAndRead(url)
+		body, err := common.GetAndRead(url)
 		if err != nil {
 			result["ticks"] = nil
 			return
@@ -314,7 +312,7 @@ func GetDetailMoneyFlow(code string) interface{} {
 		return nil
 	}
 
-	body, err := apiV1.GetAndRead(MoneyFlowUrl + cid)
+	body, err := common.GetAndRead(MoneyFlowUrl + cid)
 	if err != nil {
 		return nil
 	}

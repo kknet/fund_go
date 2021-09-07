@@ -1,11 +1,11 @@
 package download
 
 import (
-	api "fund_go2/api"
 	"fund_go2/common"
 	"github.com/go-gota/gota/dataframe"
 	"github.com/go-gota/gota/series"
 	jsoniter "github.com/json-iterator/go"
+	"gonum.org/v1/gonum/mat"
 	"log"
 	"strings"
 	"sync"
@@ -72,16 +72,16 @@ func getGlobalChan() chan string {
 }
 
 // 计算股票指标
-func calData(df Dataframe, marketType string) Dataframe {
+func calData(df dataframe.DataFrame, marketType string) dataframe.DataFrame {
 
 	code := df.Col("code").Records()
 	// cid
-	if df.ColIn("cid") {
+	if common.InSlice("cid", df.Names()) {
 		cid := df.Col("cid").Records()
 		for i := range cid {
 			cid[i] += "." + code[i]
 		}
-		df.Mutate(series.New(cid, series.String, "cid"))
+		df = df.Mutate(series.New(cid, series.String, "cid"))
 	}
 
 	// code
@@ -95,15 +95,38 @@ func calData(df Dataframe, marketType string) Dataframe {
 			code[i] += "." + marketType
 		}
 	}
-	df.Mutate(series.New(code, series.String, "code"))
+	df = df.Mutate(series.New(code, series.String, "code"))
 
 	// net
-	avgPrice := df.Cal(df.Col("amount"), "/", df.Col("vol"))
-	buy := df.Cal(df.Col("buy"), "-", df.Col("sell"))
-	df.CalAndSet(avgPrice, "*", buy, "net")
-	df.Drop([]string{"buy", "sell"})
+	avgPrice := Cal(df.Col("amount"), "/", df.Col("vol"))
+	buy := Cal(df.Col("buy"), "-", df.Col("sell"))
+	net := Cal(avgPrice, "*", buy, "net")
+	df = df.Mutate(net).Drop([]string{"buy", "sell"})
 
 	return df
+}
+
+// Cal series之间运算
+func Cal(s1 series.Series, operation string, s2 series.Series, name ...string) series.Series {
+	v1 := mat.NewVecDense(s1.Len(), s1.Float())
+	v2 := mat.NewVecDense(s2.Len(), s2.Float())
+
+	switch operation {
+	case "+":
+		v1.AddVec(v1, v2)
+	case "-":
+		v1.SubVec(v1, v2)
+	case "*":
+		v1.MulElemVec(v1, v2)
+	case "/":
+		v1.DivElemVec(v1, v2)
+	}
+
+	if len(name) > 0 {
+		return series.New(v1.RawVector().Data, series.Float, name[0])
+	} else {
+		return series.New(v1.RawVector().Data, series.Float, "x")
+	}
 }
 
 // 下载股票数据
@@ -112,7 +135,6 @@ func getRealStock(marketType string) {
 	var tempUrl string
 	// 定时更新计数器
 	var count = MaxCount
-	client := api.NewRequest()
 	for {
 		// 连接参数
 		tempUrl = url + common.JoinMapKeys(proName, ",")
@@ -123,7 +145,7 @@ func getRealStock(marketType string) {
 			tempUrl += "," + common.JoinMapKeys(lowName, ",")
 		}
 
-		body, err := client.DoAndRead(tempUrl)
+		body, err := common.GetAndRead(tempUrl)
 		if err != nil {
 			log.Println("下载股票数据失败，3秒后重试...", err.Error())
 			time.Sleep(time.Second * 3)
@@ -131,16 +153,21 @@ func getRealStock(marketType string) {
 		}
 		str := json.Get(body, "data", "diff").ToString()
 
-		t := dataframe.ReadJSON(strings.NewReader(str), dataframe.WithTypes(map[string]series.Type{
+		df := dataframe.ReadJSON(strings.NewReader(str), dataframe.WithTypes(map[string]series.Type{
 			"f12": series.String, "f13": series.String,
 		}))
-		// 用自定义的Dataframe加载
-		df := Dataframe{t}
 
 		// 重命名
-		df.RenameDict(proName)
-		df.RenameDict(basicName)
-		df.RenameDict(lowName)
+		for _, col := range df.Names() {
+			newName, ok := proName[col]
+			if !ok {
+				newName, ok = basicName[col]
+				if !ok {
+					newName = lowName[col]
+				}
+			}
+			df = df.Rename(newName, col)
+		}
 
 		df = calData(df, marketType)
 		UpdateMongo(df.Maps())
@@ -170,9 +197,8 @@ func getRealStock(marketType string) {
 // 获取市场交易状态
 func getMarketStatus() {
 	url := "https://xueqiu.com/service/v5/stock/batch/quote?symbol=SH000001,HKHSI,.IXIC"
-	client := api.NewRequest()
 	for {
-		body, err := client.DoAndRead(url)
+		body, err := common.GetAndRead(url)
 		if err != nil {
 			log.Println("更新市场状态失败，3秒后重试...", err.Error())
 			time.Sleep(time.Second * 3)
