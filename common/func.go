@@ -49,13 +49,3 @@ func Expression(b bool, true interface{}, false interface{}) interface{} {
 		return false
 	}
 }
-
-// InSlice 判断元素在数组中
-func InSlice(elem string, arr []string) bool {
-	for i := range arr {
-		if elem == arr[i] {
-			return true
-		}
-	}
-	return false
-}

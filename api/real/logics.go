@@ -14,8 +14,8 @@ import (
 )
 
 const (
-	SimpleMinuteUrl = "https://push2.eastmoney.com/api/qt/stock/trends2/get?fields1=f10,f11&fields2=f53&iscr=0&secid="
-	Day60Url        = "https://push2his.eastmoney.com/api/qt/stock/kline/get?fields1=f1,f6&fields2=f51,f53&klt=101&fqt=0&end=20500101&lmt=60&secid="
+	SimpleMinuteUrl = "https://push2.eastmoney.com/api/qt/stock/trends2/get?fields1=f8,f10&fields2=f53&iscr=0&secid="
+	Day60Url        = "https://push2his.eastmoney.com/api/qt/stock/kline/get?fields1=f6&fields2=f53&klt=101&fqt=0&end=20500101&lmt=60&secid="
 	PanKouUrl       = "https://push2.eastmoney.com/api/qt/stock/get?fltt=2&fields=f58,f530,f135,f136,f137,f138,f139,f141,f142,f144,f145,f147,f148,f140,f143,f146,f149&secid="
 	TicksUrl        = "https://push2.eastmoney.com/api/qt/stock/details/get?fields1=f1&fields2=f51,f52,f53,f55"
 	MoneyFlowUrl    = "https://push2.eastmoney.com/api/qt/stock/fflow/kline/get?lmt=0&klt=1&fields1=f1&fields2=f53,f54,f55,f56&secid="
@@ -30,6 +30,11 @@ var basicOpt = bson.M{
 	"_id": 0, "cid": 1, "code": 1, "name": 1, "type": 1, "marketType": 1,
 	"close": 1, "price": 1, "pct_chg": 1, "amount": 1, "mc": 1, "tr": 1,
 	"net": 1, "main_net": 1, "roe": 1, "income_yoy": 1, "revenue_yoy": 1,
+}
+
+var rankOpt = bson.M{
+	"_id": 0, "cid": 1, "code": 1, "name": 1, "type": 1,
+	"close": 1, "price": 1, "pct_chg": 1,
 }
 
 var searchOpt = bson.M{
@@ -87,7 +92,7 @@ func GetStockList(codes []string, detail ...bool) []bson.M {
 		// 自选表 简略数据
 	} else {
 		_ = download.RealColl.Find(ctx, bson.M{"_id": bson.M{"$in": codes}}).Select(bson.M{
-			"_id": 0, "code": 1, "price": 1, "pct_chg": 1,
+			"_id": 0, "code": 1, "price": 1, "pct_chg": 1, "high": 1, "low": 1,
 			"vol": 1, "amount": 1, "net": 1, "main_net": 1,
 		}).All(&data)
 	}
@@ -118,6 +123,7 @@ func AddSimpleMinute(items bson.M) {
 	}
 
 	total := json.Get(body, "data", "trendsTotal").ToInt()
+	preClose := json.Get(body, "data", "preClose").ToFloat64()
 	json.Get(body, "data", "trends").ToVal(&info)
 
 	// 间隔
@@ -129,10 +135,8 @@ func AddSimpleMinute(items bson.M) {
 		data, _ := strconv.ParseFloat(item[1], 8)
 		results = append(results, data)
 	}
-	results = append(results, items["price"].(float64))
-
 	items["chart"] = bson.M{
-		"total": total / space, "price": results,
+		"total": total / space, "price": results, "close": preClose, "type": "price",
 	}
 }
 
@@ -147,10 +151,38 @@ func Add60day(items bson.M) {
 	preClose := json.Get(body, "data", "preKPrice").ToFloat32()
 	json.Get(body, "data", "klines").ToVal(&info)
 
-	df := dataframe.ReadCSV(strings.NewReader("time,price\n" + strings.Join(info, "\n")))
-
 	items["chart"] = bson.M{
-		"time": df.Col("time").Records(), "price": df.Col("price").Float(), "close": preClose,
+		"total": 60, "price": info, "close": preClose, "type": "price",
+	}
+}
+
+// AddMainFlow 添加主力资金趋势
+func AddMainFlow(items bson.M) {
+	url := "https://push2.eastmoney.com/api/qt/stock/fflow/kline/get?lmt=0&klt=1&fields1=f1&fields2=f52&secid="
+	cid, ok := items["cid"].(string)
+	if !ok {
+		return
+	}
+
+	body, err := common.GetAndRead(url + cid)
+	if err != nil {
+		return
+	}
+
+	total := 80
+	var info []string
+	json.Get(body, "data", "klines").ToVal(&info)
+
+	// 间隔
+	space := 3
+	results := make([]float64, 0)
+
+	for i := 0; i < len(info); i += space {
+		data, _ := strconv.ParseFloat(info[i], 8)
+		results = append(results, data)
+	}
+	items["chart"] = bson.M{
+		"total": total, "price": results, "type": "flow",
 	}
 }
 
@@ -201,14 +233,15 @@ func search(input string) []bson.M {
 func getRank(opt *common.RankOpt) []bson.M {
 	var results []bson.M
 
+	var queryOpt = rankOpt
+	// 添加指定参数
+	queryOpt[opt.SortName] = 1
 	if !opt.Sorted {
 		opt.SortName = "-" + opt.SortName
 	}
 	_ = download.RealColl.Find(ctx, bson.M{
-		"marketType": opt.MarketType,
-		"vol":        bson.M{"$gt": 0},
-		"type":       "stock",
-	}).Sort(opt.SortName).Select(basicOpt).Skip(15 * (opt.Page - 1)).Limit(15).All(&results)
+		"marketType": opt.MarketType, "vol": bson.M{"$gt": 0}, "type": "stock",
+	}).Sort(opt.SortName).Select(queryOpt).Skip(20 * (opt.Page - 1)).Limit(20).All(&results)
 	return results
 }
 

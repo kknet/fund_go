@@ -42,14 +42,13 @@ var fs = map[string]string{
 // 低频数据（开盘时更新）
 var lowName = map[string]string{
 	"f13": "cid", "f14": "name", "f18": "close",
-	"f38": "total_share", "f39": "float_share",
 	"f37": "roe", "f40": "revenue", "f41": "revenue_yoy", "f45": "income", "f46": "income_yoy",
 }
 
 // 中频数据（约每分钟更新）
 var basicName = map[string]string{
-	"f17": "open", "f23": "pb", "f115": "pe_ttm",
-	"f8": "tr", "f10": "vr", "f20": "mc", "f21": "fmc",
+	"f17": "open", "f23": "pb", "f115": "pe_ttm", "f10": "vr",
+	"f38": "total_share", "f39": "float_share",
 	"f267": "3day_main_net", "f164": "5day_main_net", "f174": "10day_main_net",
 }
 
@@ -74,28 +73,30 @@ func getGlobalChan() chan string {
 // 计算股票指标
 func calData(df dataframe.DataFrame, marketType string) dataframe.DataFrame {
 
-	code := df.Col("code").Records()
-	// cid
-	if common.InSlice("cid", df.Names()) {
-		cid := df.Col("cid").Records()
-		for i := range cid {
-			cid[i] += "." + code[i]
+	code := df.Col("code")
+
+	// 格式化cid
+	cid := df.Col("cid")
+	if cid.Err == nil {
+		for i, str := range cid.Records() {
+			cid.Elem(i).Set(str + "." + code.Elem(i).String())
 		}
-		df = df.Mutate(series.New(cid, series.String, "cid"))
+		df = df.Mutate(cid)
 	}
 
-	// code
-	for i := range code {
+	// 格式化code
+	for i, str := range code.Records() {
 		switch marketType {
 		case "CN":
-			code[i] += Expression(code[i][0] == '6', ".SH", ".SZ").(string)
+			str += Expression(str[0] == '6', ".SH", ".SZ").(string)
 		case "CNIndex":
-			code[i] += Expression(code[i][0] == '0', ".SH", ".SZ").(string)
+			str += Expression(str[0] == '0', ".SH", ".SZ").(string)
 		case "HK", "US":
-			code[i] += "." + marketType
+			str += "." + marketType
 		}
+		code.Elem(i).Set(str)
 	}
-	df = df.Mutate(series.New(code, series.String, "code"))
+	df = df.Mutate(code)
 
 	// net
 	avgPrice := Cal(df.Col("amount"), "/", df.Col("vol"))
@@ -103,10 +104,30 @@ func calData(df dataframe.DataFrame, marketType string) dataframe.DataFrame {
 	net := Cal(avgPrice, "*", buy, "net")
 	df = df.Mutate(net).Drop([]string{"buy", "sell"})
 
+	// mc fmc tr
+	tShare := df.Col("total_share")
+	if tShare.Err == nil {
+
+		price := df.Col("price")
+		fShare := df.Col("float_share")
+
+		df = df.Mutate(Cal(tShare, "*", price, "mc"))
+		df = df.Mutate(Cal(fShare, "*", price, "fmc"))
+
+		tr := Cal(df.Col("vol"), "/", fShare, "tr")
+
+		// 如果是A股 换手率需要再乘100
+		scale := Expression(marketType[0:2] == "CN", 10000.0, 100.0).(float64)
+		for i, value := range tr.Float() {
+			tr.Elem(i).Set(value * scale)
+		}
+		df = df.Mutate(tr)
+	}
+
 	return df
 }
 
-// Cal series之间运算
+// Cal series进行向量运算
 func Cal(s1 series.Series, operation string, s2 series.Series, name ...string) series.Series {
 	v1 := mat.NewVecDense(s1.Len(), s1.Float())
 	v2 := mat.NewVecDense(s2.Len(), s2.Float())
@@ -121,7 +142,6 @@ func Cal(s1 series.Series, operation string, s2 series.Series, name ...string) s
 	case "/":
 		v1.DivElemVec(v1, v2)
 	}
-
 	if len(name) > 0 {
 		return series.New(v1.RawVector().Data, series.Float, name[0])
 	} else {
@@ -131,7 +151,7 @@ func Cal(s1 series.Series, operation string, s2 series.Series, name ...string) s
 
 // 下载股票数据
 func getRealStock(marketType string) {
-	url := "https://push2.eastmoney.com/api/qt/clist/get?po=1&fid=f20&pz=5000&np=1&fltt=2&pn=1&fs=" + fs[marketType] + "&fields="
+	url := "https://push2.eastmoney.com/api/qt/clist/get?po=1&fid=f20&pz=4600&np=1&fltt=2&pn=1&fs=" + fs[marketType] + "&fields="
 	var tempUrl string
 	// 定时更新计数器
 	var count = MaxCount
@@ -190,7 +210,7 @@ func getRealStock(marketType string) {
 			count = MaxCount
 			time.Sleep(time.Millisecond * 300)
 		}
-		time.Sleep(time.Millisecond * 300)
+		time.Sleep(time.Millisecond * 500)
 	}
 }
 
@@ -200,24 +220,24 @@ func getMarketStatus() {
 	for {
 		body, err := common.GetAndRead(url)
 		if err != nil {
-			log.Println("更新市场状态失败，3秒后重试...", err.Error())
+			log.Println("更新市场状态失败，3秒后重试...", err)
 			time.Sleep(time.Second * 3)
 			continue
 		}
-		items := json.Get(body, "data", "items").ToString()
+		items := json.Get(body, "data", "items")
 
 		// 设置CN，HK，US市场状态
 		for i := 0; i < 3; i++ {
-			// 解析数据
-			market := json.Get([]byte(items), i, "market", "region").ToString()
-			statusName := json.Get([]byte(items), i, "market", "status").ToString()
-			status := Expression(statusName == "交易中", true, false).(bool)
+			// 市场类型（地区）
+			market := items.Get(i, "market", "region").ToString()
+			// 状态名称
+			statusName := items.Get(i, "market", "status").ToString()
+			// 状态
+			Status[market] = Expression(statusName == "交易中", true, false).(bool)
 
-			Status[market] = status
 			StatusName[market] = statusName
 		}
-		// 每秒更新
-		time.Sleep(time.Second * 1)
+		time.Sleep(time.Second * 3)
 	}
 }
 

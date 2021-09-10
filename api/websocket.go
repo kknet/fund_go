@@ -105,7 +105,7 @@ func SendItems() {
 		// 有更新
 		if newData["vol"] != c.data["vol"] {
 			// 详情
-			results := real.GetRealTicks(c.code, 50)
+			results := real.GetRealTicks(c.code, 40)
 			results["items"] = newData
 			c.data = newData
 

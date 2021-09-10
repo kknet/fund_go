@@ -9,7 +9,6 @@ import (
 	"net/http"
 )
 
-// 主函数
 func main() {
 	// 监听websocket
 	go api.ListenChan()

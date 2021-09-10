@@ -67,6 +67,8 @@ func StockList(c *gin.Context) {
 		data = common.GoFunc(data, AddSimpleMinute)
 	case "60day":
 		data = common.GoFunc(data, Add60day)
+	case "main_net":
+		data = common.GoFunc(data, AddMainFlow)
 	}
 	c.JSON(200, gin.H{
 		"status": true, "data": data,
@@ -105,6 +107,10 @@ func GetRank(c *gin.Context) {
 	switch c.Query("chart") {
 	case "minute", "trends":
 		data = common.GoFunc(data, AddSimpleMinute)
+	case "60day":
+		data = common.GoFunc(data, Add60day)
+	case "main_net":
+		data = common.GoFunc(data, AddMainFlow)
 	}
 	c.JSON(200, gin.H{
 		"status": true, "data": data,

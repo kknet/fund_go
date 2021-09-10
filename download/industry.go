@@ -37,12 +37,7 @@ func UpdateMongo(items []map[string]interface{}) {
 	group.Add(3)
 
 	myFunc := func(s []map[string]interface{}) {
-		if len(s) == 0 {
-			group.Done()
-			return
-		}
 		myBulk := RealColl.Bulk()
-
 		// 初始化事务：写入数据
 		for i := range s {
 			myBulk = myBulk.UpdateId(s[i]["code"], bson.M{"$set": s[i]})
@@ -89,6 +84,7 @@ func CalIndustry() {
 				"fmc":         bson.M{"$sum": "$fmc"},
 				"revenue_yoy": bson.M{"$avg": "$revenue_yoy"},
 				"income_yoy":  bson.M{"$avg": "$income_yoy"},
+				"roe":         bson.M{"$avg": "$roe"},
 				"pe_ttm":      bson.M{"$avg": "$pe_ttm"},
 				"pb":          bson.M{"$avg": "$pb"},
 				"float_share": bson.M{"$sum": "$float_share"},
@@ -105,7 +101,7 @@ func CalIndustry() {
 				continue
 			}
 			i["tr"] = float64(i["vol"].(int32)) / i["float_share"].(float64) * 10000
-			i["pct_chg"] = i["power"].(float64) / float64(i["fmc"].(int64))
+			i["pct_chg"] = i["power"].(float64) / i["fmc"].(float64)
 			i["type"] = idsName
 			i["marketType"] = "CN"
 			if idsName == "sw" {
