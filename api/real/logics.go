@@ -8,13 +8,14 @@ import (
 	"github.com/go-gota/gota/series"
 	jsoniter "github.com/json-iterator/go"
 	"go.mongodb.org/mongo-driver/bson"
+	"log"
 	"strconv"
 	"strings"
 	"sync"
 )
 
 const (
-	SimpleMinuteUrl = "https://push2.eastmoney.com/api/qt/stock/trends2/get?fields1=f8,f10&fields2=f53&iscr=0&secid="
+	SimpleMinuteUrl = "https://push2.eastmoney.com/api/qt/stock/trends2/get?fields1=f10&fields2=f53&iscr=0&secid="
 	Day60Url        = "https://push2his.eastmoney.com/api/qt/stock/kline/get?fields1=f6&fields2=f53&klt=101&fqt=0&end=20500101&lmt=60&secid="
 	PanKouUrl       = "https://push2.eastmoney.com/api/qt/stock/get?fltt=2&fields=f58,f530,f135,f136,f137,f138,f139,f141,f142,f144,f145,f147,f148,f140,f143,f146,f149&secid="
 	TicksUrl        = "https://push2.eastmoney.com/api/qt/stock/details/get?fields1=f1&fields2=f51,f52,f53,f55"
@@ -45,8 +46,7 @@ var searchOpt = bson.M{
 // GetStock 获取单只股票
 func GetStock(code string, detail ...bool) bson.M {
 	data := bson.M{}
-	_ = download.RealColl.Find(ctx, bson.M{"_id": code}).
-		Select(bson.M{"_id": 0, "adj_factor": 0, "sw_code": 0}).One(&data)
+	_ = download.RealColl.Find(ctx, bson.M{"_id": code}).Select(bson.M{"_id": 0, "adj_factor": 0}).One(&data)
 
 	if len(data) <= 0 {
 		return data
@@ -56,9 +56,8 @@ func GetStock(code string, detail ...bool) bson.M {
 		// 添加行业数据
 		var industry []bson.M
 		_ = download.RealColl.Find(ctx, bson.M{"$or": bson.A{
-			bson.M{"name": data["industry"], "type": "industry"},
-			bson.M{"name": data["sw"], "type": "sw"},
-			bson.M{"name": data["area"], "type": "area"},
+			bson.M{"_id": data["industry"], "type": "industry"},
+			bson.M{"_id": data["sw"], "type": "sw"},
 		}}).Select(bson.M{"_id": 0, "name": 1, "type": 1, "pct_chg": 1}).All(&industry)
 
 		for _, item := range industry {
@@ -66,11 +65,6 @@ func GetStock(code string, detail ...bool) bson.M {
 			if ok {
 				data[ids] = item
 			}
-		}
-		// 检测申万是否为NaN
-		_, ok := data["sw"].(bson.M)
-		if !ok {
-			data["sw"] = nil
 		}
 		// 添加市场状态
 		marketType := data["marketType"].(string)
@@ -123,7 +117,6 @@ func AddSimpleMinute(items bson.M) {
 	}
 
 	total := json.Get(body, "data", "trendsTotal").ToInt()
-	preClose := json.Get(body, "data", "preClose").ToFloat64()
 	json.Get(body, "data", "trends").ToVal(&info)
 
 	// 间隔
@@ -135,8 +128,9 @@ func AddSimpleMinute(items bson.M) {
 		data, _ := strconv.ParseFloat(item[1], 8)
 		results = append(results, data)
 	}
+
 	items["chart"] = bson.M{
-		"total": total / space, "price": results, "close": preClose, "type": "price",
+		"total": total / space, "price": results, "close": items["close"], "type": "price",
 	}
 }
 
@@ -239,9 +233,13 @@ func getRank(opt *common.RankOpt) []bson.M {
 	if !opt.Sorted {
 		opt.SortName = "-" + opt.SortName
 	}
-	_ = download.RealColl.Find(ctx, bson.M{
+	err := download.RealColl.Find(ctx, bson.M{
 		"marketType": opt.MarketType, "vol": bson.M{"$gt": 0}, "type": "stock",
 	}).Sort(opt.SortName).Select(queryOpt).Skip(20 * (opt.Page - 1)).Limit(20).All(&results)
+
+	if err != nil {
+		log.Println("get rank error", err)
+	}
 	return results
 }
 

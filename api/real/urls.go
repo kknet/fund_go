@@ -100,7 +100,7 @@ func GetRank(c *gin.Context) {
 	}
 	//page
 	page := c.DefaultQuery("page", "1")
-	opt.Page, _ = strconv.ParseInt(page, 8, 64)
+	opt.Page, _ = strconv.ParseInt(page, 16, 64)
 
 	data := getRank(opt)
 	// 可指定chart, 获取简略图表数据
@@ -154,7 +154,7 @@ func GetMarket(c *gin.Context) {
 				"numbers":  getNumbers(marketType),
 				"industry": industry,
 				"sw":       sw,
-				"area":     area,
+				"area":     []bson.M{},
 			},
 		})
 	} else {
