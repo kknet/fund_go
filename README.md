@@ -8,7 +8,7 @@
 
 ##### 数据来源
 
-[Tushare大数据社区](https://tushare.pro/)、[东方财富网](https://www.eastmoney.com/)
+[Tushare大数据社区](https://tushare.pro/)、[东方财富网](https://www.eastmoney.com/)、[AKShare](https://www.akshare.xyz/)
 
 ##### 网站地址
 

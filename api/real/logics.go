@@ -15,11 +15,11 @@ import (
 )
 
 const (
-	SimpleMinuteUrl = "https://push2.eastmoney.com/api/qt/stock/trends2/get?fields1=f10&fields2=f53&iscr=0&secid="
-	Day60Url        = "https://push2his.eastmoney.com/api/qt/stock/kline/get?fields1=f6&fields2=f53&klt=101&fqt=0&end=20500101&lmt=60&secid="
-	PanKouUrl       = "https://push2.eastmoney.com/api/qt/stock/get?fltt=2&fields=f58,f530,f135,f136,f137,f138,f139,f141,f142,f144,f145,f147,f148,f140,f143,f146,f149&secid="
-	TicksUrl        = "https://push2.eastmoney.com/api/qt/stock/details/get?fields1=f1&fields2=f51,f52,f53,f55"
-	MoneyFlowUrl    = "https://push2.eastmoney.com/api/qt/stock/fflow/kline/get?lmt=0&klt=1&fields1=f1&fields2=f53,f54,f55,f56&secid="
+	SimpleMinuteUrl = "http://push2.eastmoney.com/api/qt/stock/trends2/get?fields1=f10&fields2=f53&iscr=0&secid="
+	Day60Url        = "http://push2his.eastmoney.com/api/qt/stock/kline/get?fields1=f6&fields2=f53&klt=101&fqt=0&end=20500101&lmt=60&secid="
+	PanKouUrl       = "http://push2.eastmoney.com/api/qt/stock/get?fltt=2&fields=f58,f530,f135,f136,f137,f138,f139,f141,f142,f144,f145,f147,f148,f140,f143,f146,f149&secid="
+	TicksUrl        = "http://push2.eastmoney.com/api/qt/stock/details/get?fields1=f1&fields2=f51,f52,f53,f55"
+	MoneyFlowUrl    = "http://push2.eastmoney.com/api/qt/stock/fflow/kline/get?lmt=0&klt=1&fields1=f1&fields2=f53,f54,f55,f56&secid="
 )
 
 // jsoniter
@@ -71,7 +71,6 @@ func GetStock(code string, detail ...bool) bson.M {
 		data["status"] = download.Status[marketType]
 		data["status_name"] = download.StatusName[marketType]
 	}
-
 	return data
 }
 
@@ -103,10 +102,38 @@ func GetStockList(codes []string, detail ...bool) []bson.M {
 	return results
 }
 
+// GetIndustryMinute 获取同花顺行业分时行情
+func GetIndustryMinute(code string) interface{} {
+	symbol := strings.Split(code, ".")[0]
+	body, err := common.GetAndRead("http://d.10jqka.com.cn/v6/time/bk_" + symbol + "/defer/last.js")
+	if err != nil {
+		return err
+	}
+	// 去掉最外层的括号
+	str := strings.Split(string(body), "(")[1]
+	str = str[:len(str)-1]
+
+	info := json.Get([]byte(str), "bk_"+symbol, "data").ToString()
+	info = strings.Join(strings.Split(info, ";"), "\n")
+	df := dataframe.ReadCSV(strings.NewReader("time,price,amount,avg,vol\n" + info))
+
+	return bson.M{
+		"price":  df.Col("price").Float(),
+		"vol":    df.Col("vol").Float(),
+		"avg":    df.Col("avg").Float(),
+		"amount": df.Col("amount").Float(),
+		"color":  []float64{},
+	}
+}
+
 // AddSimpleMinute 添加简略分时行情
 func AddSimpleMinute(items bson.M) {
 	cid, ok := items["cid"].(string)
 	if !ok {
+		// 同花顺行业
+		if strings.Split(items["code"].(string), ".")[1] == "SI" {
+			getThsSimpleMinute(items)
+		}
 		return
 	}
 	var info []string
@@ -116,8 +143,9 @@ func AddSimpleMinute(items bson.M) {
 		return
 	}
 
-	total := json.Get(body, "data", "trendsTotal").ToInt()
-	json.Get(body, "data", "trends").ToVal(&info)
+	data := json.Get(body, "data")
+	total := data.Get("trendsTotal").ToInt()
+	data.Get("trends").ToVal(&info)
 
 	// 间隔
 	space := 3
@@ -131,6 +159,44 @@ func AddSimpleMinute(items bson.M) {
 
 	items["chart"] = bson.M{
 		"total": total / space, "price": results, "close": items["close"], "type": "price",
+	}
+}
+
+func getThsSimpleMinute(items bson.M) {
+	code := items["code"].(string)
+	symbol := strings.Split(code, ".")
+	code = "bk_" + symbol[0]
+
+	body, err := common.GetThsAndRead("http://d.10jqka.com.cn/v6/time/" + code + "/last.js")
+	if err != nil {
+		return
+	}
+	// 去掉最外层的括号
+	strs := strings.Split(string(body), "(")
+	if len(strs) < 2 {
+		return
+	}
+	// 取第二条 并去掉末尾的右括号
+	str := strs[1]
+	bytesData := common.Str2bytes(str[:len(str)-1])
+
+	source := json.Get(bytesData, code, "data").ToString()
+	total := json.Get(bytesData, code, "dotsCount").ToInt()
+	preClose := json.Get(bytesData, code, "pre").ToFloat64()
+
+	info := strings.Split(source, ";")
+
+	// 间隔
+	space := 3
+	results := make([]float64, 0)
+
+	for i := 0; i < len(info); i += space {
+		item := strings.Split(info[i], ",")
+		data, _ := strconv.ParseFloat(item[1], 8)
+		results = append(results, data)
+	}
+	items["chart"] = bson.M{
+		"total": total / space, "price": results, "close": preClose, "type": "price",
 	}
 }
 
@@ -152,7 +218,7 @@ func Add60day(items bson.M) {
 
 // AddMainFlow 添加主力资金趋势
 func AddMainFlow(items bson.M) {
-	url := "https://push2.eastmoney.com/api/qt/stock/fflow/kline/get?lmt=0&klt=1&fields1=f1&fields2=f52&secid="
+	url := "http://push2.eastmoney.com/api/qt/stock/fflow/kline/get?lmt=0&klt=1&fields1=f1&fields2=f52&secid="
 	cid, ok := items["cid"].(string)
 	if !ok {
 		return
@@ -176,7 +242,7 @@ func AddMainFlow(items bson.M) {
 		results = append(results, data)
 	}
 	items["chart"] = bson.M{
-		"total": total, "price": results, "type": "flow",
+		"total": total, "price": results, "close": 0, "type": "flow",
 	}
 }
 
@@ -370,7 +436,8 @@ func GetIndustryMembers(industryCode string) []bson.M {
 	// 获取成分股列表
 	_ = download.RealColl.Find(ctx, bson.M{"_id": industryCode}).Select(bson.M{"members": 1}).One(&members)
 	// 获取行情
-	_ = download.RealColl.Find(ctx, bson.M{"_id": bson.M{"$in": members["members"]}}).Select(basicOpt).All(&data)
+	_ = download.RealColl.Find(ctx, bson.M{"_id": bson.M{"$in": members["members"]}}).
+		Sort("-pct_chg").Limit(20).Select(basicOpt).All(&data)
 
 	return data
 }

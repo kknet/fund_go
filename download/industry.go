@@ -36,10 +36,10 @@ func UpdateMongo(items []map[string]interface{}) {
 	group.Add(3)
 
 	myFunc := func(s []map[string]interface{}) {
+		// 使用bulk_write 批量写入
 		myBulk := RealColl.Bulk()
-		// 初始化事务：写入数据
-		for i := range s {
-			myBulk = myBulk.UpdateId(s[i]["code"], bson.M{"$set": s[i]})
+		for _, i := range s {
+			myBulk = myBulk.UpdateId(i["code"], bson.M{"$set": i})
 		}
 		_, err := myBulk.Run(ctx)
 		if err != nil {

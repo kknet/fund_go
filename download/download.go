@@ -105,10 +105,11 @@ func calData(df dataframe.DataFrame, marketType string) dataframe.DataFrame {
 	df = df.Mutate(net).Drop([]string{"buy", "sell"})
 
 	// mc fmc tr
-	tShare := df.Col("total_share")
-	if tShare.Err == nil {
+	if df.Col("total_share").Err == nil {
+		df = df.Filter(dataframe.F{Colname: "total_share", Comparator: series.Greater, Comparando: 0})
 
 		price := df.Col("price")
+		tShare := df.Col("total_share")
 		fShare := df.Col("float_share")
 
 		df = df.Mutate(Cal(tShare, "*", price, "mc"))

@@ -12,16 +12,22 @@ import (
 // GetChart 获取图表数据
 func GetChart(c *gin.Context) {
 	chartType := c.Param("chart_type")
+	// code参数
+	code, ok := c.GetQuery("code")
+	if !ok {
+		c.JSON(200, gin.H{
+			"status": false, "msg": "必须指定code参数",
+		})
+		return
+	}
 	switch chartType {
 	case "detail_money":
-		code, ok := c.GetQuery("code")
-		if !ok {
-			c.JSON(200, gin.H{
-				"status": false, "msg": "必须指定code参数",
-			})
-			return
-		}
 		data := GetDetailMoneyFlow(code)
+		c.JSON(200, gin.H{
+			"status": true, "data": data,
+		})
+	case "industry":
+		data := GetIndustryMinute(code)
 		c.JSON(200, gin.H{
 			"status": true, "data": data,
 		})
