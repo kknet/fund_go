@@ -23,7 +23,8 @@ func Expression(b bool, true interface{}, false interface{}) interface{} {
 }
 
 func InitMongo() *qmgo.Collection {
-	client, err := qmgo.NewClient(ctx, &qmgo.Config{Uri: "mongodb://localhost:27017"})
+	// docker连接: host.docker.internal
+	client, err := qmgo.NewClient(ctx, &qmgo.Config{Uri: "mongodb://host.docker.internal:27017"})
 	if err != nil {
 		panic(err)
 	}

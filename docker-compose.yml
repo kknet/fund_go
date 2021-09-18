@@ -1,0 +1,6 @@
+# yaml 配置
+services:
+  web:
+    build: .
+    ports:
+      - "10888:10888"

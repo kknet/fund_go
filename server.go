@@ -16,23 +16,10 @@ func main() {
 	// 启动后台下载
 	download.GoDownload()
 
-	var err error
-	// 设置日志
-	//gin.DisableConsoleColor()
-	//f, err := os.Create("./logs/run.log")
-	//if err != nil {
-	//	log.Println("Could not open log.")
-	//	panic(err)
-	//}
-	//gin.DefaultWriter = io.MultiWriter(f)
-	//
 	//gin.SetMode(gin.ReleaseMode)
 
 	// 创建实例
 	r := gin.Default()
-
-	// 性能优化
-	//pprof.Register(r)
 
 	// api
 	v1 := r.Group("/api/v1")
@@ -73,7 +60,7 @@ func main() {
 	})
 
 	// 启动
-	err = r.Run("0.0.0.0:10888")
+	err := r.Run("0.0.0.0:10888")
 	if err != nil {
 		panic(err)
 	}

@@ -48,7 +48,7 @@ func StockDetail(c *gin.Context) {
 		})
 		return
 	}
-	data := GetStock(code)
+	data := GetStock(code, true)
 	c.JSON(200, gin.H{
 		"status": true, "data": data,
 	})

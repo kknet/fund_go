@@ -8,7 +8,6 @@ import (
 	"github.com/go-gota/gota/series"
 	jsoniter "github.com/json-iterator/go"
 	"go.mongodb.org/mongo-driver/bson"
-	"log"
 	"strconv"
 	"strings"
 	"sync"
@@ -33,11 +32,6 @@ var basicOpt = bson.M{
 	"net": 1, "main_net": 1, "roe": 1, "income_yoy": 1, "revenue_yoy": 1,
 }
 
-var rankOpt = bson.M{
-	"_id": 0, "cid": 1, "code": 1, "name": 1, "type": 1,
-	"close": 1, "price": 1, "pct_chg": 1,
-}
-
 var searchOpt = bson.M{
 	"_id": 0, "code": 1, "name": 1, "type": 1, "marketType": 1,
 	"price": 1, "pct_chg": 1, "amount": 1,
@@ -45,14 +39,10 @@ var searchOpt = bson.M{
 
 // GetStock 获取单只股票
 func GetStock(code string, detail ...bool) bson.M {
-	data := bson.M{}
+	var data bson.M
 	_ = download.RealColl.Find(ctx, bson.M{"_id": code}).Select(bson.M{"_id": 0, "adj_factor": 0}).One(&data)
 
-	if len(data) <= 0 {
-		return data
-	}
-
-	if len(detail) == 0 {
+	if len(detail) > 0 {
 		// 添加行业数据
 		var industry []bson.M
 		_ = download.RealColl.Find(ctx, bson.M{"$or": bson.A{
@@ -75,20 +65,15 @@ func GetStock(code string, detail ...bool) bson.M {
 }
 
 // GetStockList 获取多只股票信息
-func GetStockList(codes []string, detail ...bool) []bson.M {
+func GetStockList(codes []string) []bson.M {
 	results := make([]bson.M, 0)
 	data := make([]bson.M, 0)
 
-	if len(detail) == 0 {
-		_ = download.RealColl.Find(ctx, bson.M{"_id": bson.M{"$in": codes}}).Select(basicOpt).All(&data)
-
-		// 自选表 简略数据
-	} else {
-		_ = download.RealColl.Find(ctx, bson.M{"_id": bson.M{"$in": codes}}).Select(bson.M{
-			"_id": 0, "code": 1, "price": 1, "pct_chg": 1, "high": 1, "low": 1,
-			"vol": 1, "amount": 1, "net": 1, "main_net": 1,
-		}).All(&data)
-	}
+	_ = download.RealColl.Find(ctx, bson.M{"_id": bson.M{"$in": codes}}).Select(bson.M{
+		"_id": 0, "cid": 1, "code": 1, "name": 1, "type": 1, "marketType": 1,
+		"close": 1, "price": 1, "pct_chg": 1, "amount": 1, "mc": 1,
+		"net": 1, "main_net": 1, "roe": 1, "income_yoy": 1, "revenue_yoy": 1,
+	}).All(&data)
 
 	// 排序
 	for _, c := range codes {
@@ -293,25 +278,27 @@ func search(input string) []bson.M {
 func getRank(opt *common.RankOpt) []bson.M {
 	var results []bson.M
 
-	var queryOpt = rankOpt
+	var rankOpt = bson.M{
+		"_id": 0, "cid": 1, "code": 1, "name": 1, "type": 1,
+		"close": 1, "price": 1, "pct_chg": 1,
+	}
+
 	// 添加指定参数
-	queryOpt[opt.SortName] = 1
+	rankOpt[opt.SortName] = 1
 	if !opt.Sorted {
 		opt.SortName = "-" + opt.SortName
 	}
-	err := download.RealColl.Find(ctx, bson.M{
-		"marketType": opt.MarketType, "vol": bson.M{"$gt": 0}, "type": "stock",
-	}).Sort(opt.SortName).Select(queryOpt).Skip(20 * (opt.Page - 1)).Limit(20).All(&results)
 
-	if err != nil {
-		log.Println("get rank error", err)
-	}
+	_ = download.RealColl.Find(ctx, bson.M{
+		"marketType": opt.MarketType, "vol": bson.M{"$gt": 0}, "type": "stock",
+	}).Sort(opt.SortName).Select(rankOpt).Skip(20 * (opt.Page - 1)).Limit(20).All(&results)
+
 	return results
 }
 
 // GetRealTicks 获取五档挂单明细、分笔成交
 func GetRealTicks(code string, count int) bson.M {
-	item := GetStock(code, false)
+	item := GetStock(code)
 	result := bson.M{}
 
 	cid, ok := item["cid"].(string)
@@ -321,28 +308,23 @@ func GetRealTicks(code string, count int) bson.M {
 	group := sync.WaitGroup{}
 	group.Add(2)
 
+	// 获取盘口明细
 	go func() {
-		if item["marketType"] == "CN" || item["marketType"] == "HK" {
+		if item["marketType"] == "CN" {
 			body, err := common.GetAndRead(PanKouUrl + cid)
 			if err != nil {
-				result["pankou"] = nil
 				return
 			}
-
 			var data bson.M
 			json.Get(body, "data").ToVal(&data)
 			result["pankou"] = data
-		} else {
-			result["pankou"] = nil
 		}
 		group.Done()
 	}()
+	// 获取成交明细
 	go func() {
-		url := TicksUrl + "&pos=-" + strconv.Itoa(count) + "&secid=" + cid
-
-		body, err := common.GetAndRead(url)
+		body, err := common.GetAndRead(TicksUrl + "&pos=-" + strconv.Itoa(count) + "&secid=" + cid)
 		if err != nil {
-			result["ticks"] = nil
 			return
 		}
 		var info []string
@@ -360,8 +342,7 @@ func GetRealTicks(code string, count int) bson.M {
 			}
 			return data
 		})
-		df = df.Mutate(side)
-		result["ticks"] = df.Maps()
+		result["ticks"] = df.Mutate(side).Maps()
 		group.Done()
 	}()
 	group.Wait()
