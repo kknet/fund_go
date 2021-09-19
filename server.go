@@ -11,7 +11,6 @@ import (
 )
 
 func init() {
-	user.Register()
 	// 监听websocket
 	go api.ListenChan()
 
@@ -25,8 +24,8 @@ func main() {
 	// 创建实例
 	r := gin.Default()
 
-	// api
-	v1 := r.Group("/api/v1")
+	// apiV1
+	apiV1 := r.Group("/api/v1")
 	ws := r.Group("/ws")
 
 	// WebSocket
@@ -35,7 +34,7 @@ func main() {
 	wsStock.GET("/detail", api.ConnectItems)
 
 	// Stock 股票数据
-	stock := v1.Group("/stock")
+	stock := apiV1.Group("/stock")
 	stock.GET("/list", real.StockList)
 	stock.GET("/detail", real.StockDetail)
 	stock.GET("/chart/:chart_type", real.GetChart)
@@ -43,15 +42,20 @@ func main() {
 	stock.GET("/search", real.Search)
 
 	// Market 市场数据
-	market := v1.Group("/market")
+	market := apiV1.Group("/market")
 	market.GET("/rank", real.GetRank)
 	market.GET("/industry", real.GetMarket)
 	market.GET("/members", real.GetMembers)
 
 	// Fina 财务数据
-	Fina := v1.Group("/fina")
+	Fina := apiV1.Group("/fina")
 	Fina.GET("/get", fina.GetFina)
 	Fina.GET("/filter", fina.Filter)
+
+	// User 用户
+	User := apiV1.Group("/user")
+	User.GET("/info", user.Login)
+	User.POST("/info", user.Register)
 
 	// 首页
 	r.GET("/", func(c *gin.Context) {
