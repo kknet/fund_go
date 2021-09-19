@@ -13,18 +13,18 @@ import (
 var ctx = context.Background()
 var RealColl = InitMongo()
 
-// Expression 自定义三元表达式
+// Expression 三元表达式
 func Expression(b bool, true interface{}, false interface{}) interface{} {
 	if b {
 		return true
-	} else {
-		return false
 	}
+	return false
 }
 
+// InitMongo 初始化连接
 func InitMongo() *qmgo.Collection {
 	// docker连接: host.docker.internal
-	client, err := qmgo.NewClient(ctx, &qmgo.Config{Uri: "mongodb://host.docker.internal:27017"})
+	client, err := qmgo.NewClient(ctx, &qmgo.Config{Uri: "mongodb://localhost:27017"})
 	if err != nil {
 		panic(err)
 	}
@@ -32,6 +32,7 @@ func InitMongo() *qmgo.Collection {
 	return coll
 }
 
+// UpdateMongo 更新实时数据至Mongo
 func UpdateMongo(items []map[string]interface{}) {
 	group := sync.WaitGroup{}
 	group.Add(3)
@@ -84,7 +85,7 @@ func CalIndustry() {
 			}}},
 		}).All(&results)
 		if err != nil {
-			log.Println("CalIndustry错误: ", err)
+			log.Println("CalIndustry聚合错误: ", err)
 		}
 
 		for _, i := range results {
@@ -99,7 +100,7 @@ func CalIndustry() {
 
 			err = RealColl.UpdateId(ctx, i["_id"], bson.M{"$set": i})
 			if err != nil {
-				log.Println(err)
+				log.Println("CalIndustry更新错误: ", err)
 			}
 		}
 	}

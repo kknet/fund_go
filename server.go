@@ -4,18 +4,22 @@ import (
 	api "fund_go2/api"
 	"fund_go2/api/fina"
 	"fund_go2/api/real"
+	"fund_go2/api/user"
 	"fund_go2/download"
 	"github.com/gin-gonic/gin"
 	"net/http"
 )
 
-func main() {
+func init() {
+	user.Register()
 	// 监听websocket
 	go api.ListenChan()
 
 	// 启动后台下载
 	download.GoDownload()
+}
 
+func main() {
 	//gin.SetMode(gin.ReleaseMode)
 
 	// 创建实例

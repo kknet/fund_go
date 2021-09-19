@@ -42,15 +42,6 @@ func JoinMapKeys(maps map[string]string, concatStr string) string {
 	return str
 }
 
-// Expression 自定义三元表达式
-func Expression(b bool, true interface{}, false interface{}) interface{} {
-	if b {
-		return true
-	} else {
-		return false
-	}
-}
-
 // Str2bytes 使用unsafe包转换string与byte
 func Str2bytes(s string) []byte {
 	x := (*[2]uintptr)(unsafe.Pointer(&s))

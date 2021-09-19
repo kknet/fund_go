@@ -5,6 +5,7 @@ import (
 	"fund_go2/download"
 	"github.com/gin-gonic/gin"
 	"go.mongodb.org/mongo-driver/bson"
+	"net/http"
 	"strconv"
 	"strings"
 )
@@ -15,7 +16,7 @@ func GetChart(c *gin.Context) {
 	// code参数
 	code, ok := c.GetQuery("code")
 	if !ok {
-		c.JSON(200, gin.H{
+		c.JSON(http.StatusOK, gin.H{
 			"status": false, "msg": "必须指定code参数",
 		})
 		return
@@ -23,16 +24,16 @@ func GetChart(c *gin.Context) {
 	switch chartType {
 	case "detail_money":
 		data := GetDetailMoneyFlow(code)
-		c.JSON(200, gin.H{
+		c.JSON(http.StatusOK, gin.H{
 			"status": true, "data": data,
 		})
 	case "industry":
 		data := GetIndustryMinute(code)
-		c.JSON(200, gin.H{
+		c.JSON(http.StatusOK, gin.H{
 			"status": true, "data": data,
 		})
 	default:
-		c.JSON(200, gin.H{
+		c.JSON(http.StatusNotFound, gin.H{
 			"status": false, "msg": "该页面不存在",
 		})
 	}
@@ -43,13 +44,13 @@ func StockDetail(c *gin.Context) {
 	// 指定code
 	code, ok := c.GetQuery("code")
 	if !ok {
-		c.JSON(200, gin.H{
+		c.JSON(http.StatusOK, gin.H{
 			"status": false, "msg": "必须指定code参数",
 		})
 		return
 	}
 	data := GetStock(code, true)
-	c.JSON(200, gin.H{
+	c.JSON(http.StatusOK, gin.H{
 		"status": true, "data": data,
 	})
 }
@@ -199,4 +200,9 @@ func GetTicks(c *gin.Context) {
 	c.JSON(200, gin.H{
 		"status": true, "data": data,
 	})
+}
+
+// ViewStock 访问某只股票
+func ViewStock(c *gin.Context) {
+
 }
