@@ -12,8 +12,8 @@ var (
 	redisDB = connectRedisDB()
 )
 
-// User 用户表model
-type User struct {
+// 用户表结构
+type user struct {
 	Id       int       `xorm:"int(10) pk not null autoincr"`
 	Username string    `xorm:"varchar(32) unique not null"`
 	Password string    `xorm:"varchar(32) not null"`
@@ -23,35 +23,37 @@ type User struct {
 	Created  time.Time `xorm:"created"`
 }
 
-// LoginForm 登录表单
-type LoginForm struct {
-	Username string `xorm:"username"`
-	Password string `xorm:"password"`
+// 登录表单
+type loginForm struct {
+	Id       int
+	Username string `xorm:"username" validate:"required"`
+	Password string `xorm:"password" validate:"required"`
 }
 
-// RegisterForm 注册表单
-type RegisterForm struct {
-	Username string `xorm:"username"`
-	Password string `xorm:"password"`
-	//Phone    string `xorm:"phone"`
-	//Email    string `xorm:"email"`
+// 注册表单
+// omitempty 空时忽略
+type registerForm struct {
+	Username string `xorm:"username" validate:"required"`
+	Password string `xorm:"password" validate:"required"`
+	// Phone    string `xorm:"phone" validate:"omitempty,len=11"`
+	// Email    string `xorm:"email" validate:"omitempty,email"`
 	Created time.Time `xorm:"created"`
 }
 
-// UserInfo 用户信息
-type UserInfo struct {
-	Id       int
-	Username string
-	Phone    string
-	Email    string
-	Points   int
+// 用户信息
+type userInfo struct {
+	Id       int    `json:"id"`
+	Username string `json:"username"`
+	Phone    string `json:"phone"`
+	Email    string `json:"email"`
+	Points   int    `json:"points"`
 }
 
-// 尝试建表
+// 建表
 func init() {
-	err := userDB.Sync2(new(User))
+	err := userDB.Sync2(new(user))
 	if err != nil {
-		log.Println(err)
+		log.Println("建表失败！", err)
 	}
 }
 

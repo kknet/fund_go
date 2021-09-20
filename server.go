@@ -54,8 +54,12 @@ func main() {
 
 	// User 用户
 	User := apiV1.Group("/user")
-	User.GET("/info", user.Login)
+	// 使用中间件
+	User.GET("/info", user.GetInfo)
 	User.POST("/info", user.Register)
+	User.PUT("/info", user.UpdateInfo)
+	User.POST("/token", user.Login)
+	User.DELETE("/token", user.Logout)
 
 	// 首页
 	r.GET("/", func(c *gin.Context) {

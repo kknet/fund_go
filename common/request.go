@@ -2,6 +2,7 @@ package common
 
 import (
 	"errors"
+	"github.com/gin-gonic/gin"
 	"io/ioutil"
 	"net/http"
 	"time"
@@ -45,4 +46,17 @@ func GetThsAndRead(url string) ([]byte, error) {
 	}
 
 	return body, nil
+}
+
+// MyResponse 返回值
+func MyResponse(c *gin.Context, success bool, value interface{}) {
+	if success {
+		c.JSON(http.StatusOK, gin.H{
+			"status": true, "data": value,
+		})
+	} else {
+		c.JSON(http.StatusOK, gin.H{
+			"status": false, "msg": value,
+		})
+	}
 }
