@@ -34,7 +34,7 @@ https://lucario.ltd
 
 ### Golang
 
-1. 使用gin web框架
+1. 使用gin web框架，自定义中间件拦截一些非法请求，复用功能
 2. 用户模块使用xorm + validator 验证表单、操作数据库，使用jwt技术 + Redis验证token
 3. 使用Redis记录股票热度（访问次数）
 4. 实时数据使用dataframe-go、gonum计算，使用MongoDB存储，并使用websocket实时推送
