@@ -35,11 +35,13 @@ func main() {
 
 	// Stock 股票数据
 	stock := apiV1.Group("/stock")
+	stock.GET("/search", real.Search)
+	// 验证代码中间件
+	stock.Use(real.CheckCodeFunc)
 	stock.GET("/list", real.StockList)
 	stock.GET("/detail", real.StockDetail)
 	stock.GET("/chart/:chart_type", real.GetChart)
 	stock.GET("/ticks", real.GetTicks)
-	stock.GET("/search", real.Search)
 
 	// Market 市场数据
 	market := apiV1.Group("/market")
@@ -55,11 +57,11 @@ func main() {
 	// User 用户
 	User := apiV1.Group("/user")
 	// 使用中间件
-	User.GET("/info", user.GetInfo)
+	User.GET("/info", user.Authorize, user.GetInfo)
 	User.POST("/info", user.Register)
-	User.PUT("/info", user.UpdateInfo)
+	User.PUT("/info", user.Authorize, user.UpdateInfo)
 	User.POST("/token", user.Login)
-	User.DELETE("/token", user.Logout)
+	User.DELETE("/token", user.Authorize, user.Logout)
 
 	// 首页
 	r.GET("/", func(c *gin.Context) {

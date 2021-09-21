@@ -422,3 +422,8 @@ func GetIndustryMembers(industryCode string) []bson.M {
 
 	return data
 }
+
+// 查看股票页面
+func viewPage(code string) {
+
+}

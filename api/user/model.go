@@ -25,8 +25,8 @@ type user struct {
 // 登录表单
 type loginForm struct {
 	Id       int
-	Username string `xorm:"username" validate:"required"`
-	Password string `xorm:"password" validate:"required"`
+	Username string `xorm:"username" validate:"required,min=4,max=10"`
+	Password string `xorm:"password" validate:"required,min=6,max=16"`
 }
 
 // 注册表单

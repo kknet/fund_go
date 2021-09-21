@@ -4,21 +4,20 @@ import (
 	"github.com/gin-gonic/gin"
 	"go.mongodb.org/mongo-driver/bson"
 	"net/http"
+	"strconv"
 )
 
-// CheckToken 中间件
-func CheckToken() gin.HandlerFunc {
-	return func(c *gin.Context) {
-		token := c.GetHeader("token")
-		claims, err := parseToken(token)
-		if err != nil {
-			c.JSON(http.StatusBadRequest, bson.M{
-				"status": false, "msg": "请先登录",
-			})
-			c.Done()
-		}
+// Authorize 验证中间件
+func Authorize(c *gin.Context) {
+	token := c.GetHeader("token")
+	claims, err := parseToken(token)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, bson.M{
+			"status": false, "msg": "请先登录",
+		})
+		c.Abort()
+	} else {
 		c.Set("id", claims.Id)
-		c.Next()
 	}
 }
 
@@ -27,8 +26,6 @@ func Register(c *gin.Context) {
 	data := &registerForm{
 		Username: c.PostForm("username"),
 		Password: c.PostForm("password"),
-		Phone:    nil,
-		Email:    nil,
 	}
 	phone, ok := c.GetPostForm("phone")
 	if ok {
@@ -53,8 +50,8 @@ func Register(c *gin.Context) {
 
 // GetInfo 查看用户信息
 func GetInfo(c *gin.Context) {
-	token := c.GetHeader("token")
-	info, err := getInfo(token)
+	id := c.GetInt("id")
+	info, err := getInfo(id)
 
 	if err != nil {
 		c.JSON(http.StatusOK, gin.H{
@@ -94,8 +91,9 @@ func Login(c *gin.Context) {
 
 // Logout 注销
 func Logout(c *gin.Context) {
-	token := c.GetHeader("token")
-	err := logout(token)
+	id := c.GetInt("id")
+	// 删除token
+	err := redisDB.Del(ctx, strconv.Itoa(id)).Err()
 
 	if err != nil {
 		c.JSON(http.StatusOK, gin.H{

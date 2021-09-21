@@ -10,17 +10,23 @@ import (
 	"strings"
 )
 
+// CheckCodeFunc 检查代码中间件
+func CheckCodeFunc(c *gin.Context) {
+	_, ok := c.GetQuery("code")
+	if !ok {
+		c.JSON(http.StatusOK, bson.M{
+			"status": false, "msg": "必须指定code参数",
+		})
+		c.Abort()
+	}
+	c.Next()
+}
+
 // GetChart 获取图表数据
 func GetChart(c *gin.Context) {
 	chartType := c.Param("chart_type")
-	// code参数
-	code, ok := c.GetQuery("code")
-	if !ok {
-		c.JSON(http.StatusOK, gin.H{
-			"status": false, "msg": "必须指定code参数",
-		})
-		return
-	}
+	code := c.Query("code")
+
 	switch chartType {
 	// 资金博弈
 	case "zjby":
@@ -42,14 +48,7 @@ func GetChart(c *gin.Context) {
 
 // StockDetail 获取单只股票详细数据
 func StockDetail(c *gin.Context) {
-	// 指定code
-	code, ok := c.GetQuery("code")
-	if !ok {
-		c.JSON(http.StatusOK, gin.H{
-			"status": false, "msg": "必须指定code参数",
-		})
-		return
-	}
+	code := c.Query("code")
 	data := GetStock(code, true)
 	c.JSON(http.StatusOK, gin.H{
 		"status": true, "data": data,
@@ -58,14 +57,7 @@ func StockDetail(c *gin.Context) {
 
 // StockList 获取股票列表
 func StockList(c *gin.Context) {
-	// 指定code
-	code, ok := c.GetQuery("code")
-	if !ok {
-		c.JSON(200, gin.H{
-			"status": false, "msg": "必须指定code参数",
-		})
-		return
-	}
+	code := c.Query("code")
 	codeList := strings.Split(code, ",")
 	data := GetStockList(codeList)
 
@@ -191,12 +183,7 @@ func GetMembers(c *gin.Context) {
 
 // GetTicks 获取五档盘口、成交明细
 func GetTicks(c *gin.Context) {
-	code, ok := c.GetQuery("code")
-	if !ok {
-		c.JSON(200, gin.H{
-			"status": false, "msg": "必须指定code参数",
-		})
-	}
+	code := c.Query("code")
 	data := GetRealTicks(code, 50)
 	c.JSON(200, gin.H{
 		"status": true, "data": data,
@@ -204,6 +191,17 @@ func GetTicks(c *gin.Context) {
 }
 
 // ViewStock 访问某只股票
-func ViewStock(c *gin.Context) {
-
-}
+//func ViewStock(c *gin.Context) {
+//	code := c.Query("code")
+//	exists := GetStock(code)
+//	if len(exists) > 0 {
+//		count := viewPage(code)
+//		c.JSON(200, gin.H{
+//			"status": true, "data": count,
+//		})
+//	} else {
+//		c.JSON(200, gin.H{
+//			"status": false, "msg": "代码不存在",
+//		})
+//	}
+//}
