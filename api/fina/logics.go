@@ -5,16 +5,16 @@ import (
 	"xorm.io/xorm"
 )
 
-var finaDB = ConnectDB()
+var finaDB *xorm.Engine
 
-// ConnectDB 连接数据库
-func ConnectDB() *xorm.Engine {
+func init() {
+	var err error
+
 	connStr := "postgres://postgres:123456@127.0.0.1:5432/fina?sslmode=disable"
-	db, err := xorm.NewEngine("postgres", connStr)
+	finaDB, err = xorm.NewEngine("postgres", connStr)
 	if err != nil {
 		panic(err)
 	}
-	return db
 }
 
 // GetFinaData 获取股票财务数据

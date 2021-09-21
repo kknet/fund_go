@@ -3,11 +3,11 @@ module fund_go2
 go 1.16
 
 require (
-	github.com/dgrijalva/jwt-go v3.2.0+incompatible // indirect
+	github.com/dgrijalva/jwt-go v3.2.0+incompatible
 	github.com/gin-gonic/gin v1.7.4
 	github.com/go-gota/gota v0.11.0
-	github.com/go-playground/validator v9.31.0+incompatible // indirect
-	github.com/go-redis/redis/v8 v8.11.3 // indirect
+	github.com/go-playground/validator v9.31.0+incompatible
+	github.com/go-redis/redis/v8 v8.11.3
 	github.com/google/uuid v1.3.0
 	github.com/gorilla/websocket v1.4.2
 	github.com/json-iterator/go v1.1.12

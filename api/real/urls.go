@@ -22,12 +22,13 @@ func GetChart(c *gin.Context) {
 		return
 	}
 	switch chartType {
-	case "detail_money":
+	// 资金博弈
+	case "zjby":
 		data := GetDetailMoneyFlow(code)
 		c.JSON(http.StatusOK, gin.H{
 			"status": true, "data": data,
 		})
-	case "industry":
+	case "minute":
 		data := GetIndustryMinute(code)
 		c.JSON(http.StatusOK, gin.H{
 			"status": true, "data": data,

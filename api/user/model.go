@@ -2,14 +2,13 @@ package user
 
 import (
 	"github.com/go-redis/redis/v8"
-	"log"
 	"time"
 	"xorm.io/xorm"
 )
 
 var (
-	userDB  = connectUserDB()
-	redisDB = connectRedisDB()
+	userDB  *xorm.Engine
+	redisDB *redis.Client
 )
 
 // 用户表结构
@@ -33,11 +32,11 @@ type loginForm struct {
 // 注册表单
 // omitempty 空时忽略
 type registerForm struct {
-	Username string `xorm:"username" validate:"required"`
-	Password string `xorm:"password" validate:"required"`
-	// Phone    string `xorm:"phone" validate:"omitempty,len=11"`
-	// Email    string `xorm:"email" validate:"omitempty,email"`
-	Created time.Time `xorm:"created"`
+	Username string      `xorm:"username" validate:"required,min=4,max=10"`
+	Password string      `xorm:"password" validate:"required,min=6,max=16"`
+	Phone    interface{} `xorm:"phone" validate:"omitempty,min=11,max=11"`
+	Email    interface{} `xorm:"email" validate:"omitempty,email,min=2"`
+	Created  time.Time   `xorm:"created"`
 }
 
 // 用户信息
@@ -49,30 +48,24 @@ type userInfo struct {
 	Points   int    `json:"points"`
 }
 
-// 建表
+// 初始化数据库
 func init() {
-	err := userDB.Sync2(new(user))
-	if err != nil {
-		log.Println("建表失败！", err)
-	}
-}
+	var err error
 
-// 连接用户数据库
-func connectUserDB() *xorm.Engine {
+	// 连接UserDB
 	connStr := "postgres://postgres:123456@127.0.0.1:5432/user?sslmode=disable"
-	db, err := xorm.NewEngine("postgres", connStr)
+	userDB, err = xorm.NewEngine("postgres", connStr)
 	if err != nil {
 		panic(err)
 	}
-	return db
-}
-
-// 连接redis
-func connectRedisDB() *redis.Client {
-	//连接服务器
-	c := redis.NewClient(&redis.Options{
+	// 建表
+	err = userDB.Sync2(new(user))
+	if err != nil {
+		panic(err)
+	}
+	// 连接Redis
+	redisDB = redis.NewClient(&redis.Options{
 		Addr: "localhost:6379",
 		DB:   0,
 	})
-	return c
 }

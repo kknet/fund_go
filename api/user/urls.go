@@ -27,6 +27,16 @@ func Register(c *gin.Context) {
 	data := &registerForm{
 		Username: c.PostForm("username"),
 		Password: c.PostForm("password"),
+		Phone:    nil,
+		Email:    nil,
+	}
+	phone, ok := c.GetPostForm("phone")
+	if ok {
+		data.Phone = phone
+	}
+	email, ok := c.GetPostForm("email")
+	if ok {
+		data.Email = email
 	}
 
 	err := register(data)

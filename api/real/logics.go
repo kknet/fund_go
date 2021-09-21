@@ -90,7 +90,7 @@ func GetStockList(codes []string) []bson.M {
 // GetIndustryMinute 获取同花顺行业分时行情
 func GetIndustryMinute(code string) interface{} {
 	symbol := strings.Split(code, ".")[0]
-	body, err := common.GetAndRead("http://d.10jqka.com.cn/v6/time/bk_" + symbol + "/defer/last.js")
+	body, err := common.GetThsAndRead("http://d.10jqka.com.cn/v6/time/bk_" + symbol + "/defer/last.js")
 	if err != nil {
 		return err
 	}
@@ -107,7 +107,6 @@ func GetIndustryMinute(code string) interface{} {
 		"vol":    df.Col("vol").Float(),
 		"avg":    df.Col("avg").Float(),
 		"amount": df.Col("amount").Float(),
-		"color":  []float64{},
 	}
 }
 
@@ -290,7 +289,8 @@ func getRank(opt *common.RankOpt) []bson.M {
 	}
 
 	_ = download.RealColl.Find(ctx, bson.M{
-		"marketType": opt.MarketType, "vol": bson.M{"$gt": 0}, "type": "stock",
+		"marketType": opt.MarketType, "type": "stock",
+		"vol": bson.M{"$gt": 0}, "mc": bson.M{"$gt": 0},
 	}).Sort(opt.SortName).Select(rankOpt).Skip(20 * (opt.Page - 1)).Limit(20).All(&results)
 
 	return results

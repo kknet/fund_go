@@ -11,7 +11,18 @@ import (
 )
 
 var ctx = context.Background()
-var RealColl = InitMongo()
+var RealColl *qmgo.Collection
+
+// 初始化数据库库连接
+func init() {
+	// MongoDB
+	// docker: host.docker.internal
+	client, err := qmgo.NewClient(ctx, &qmgo.Config{Uri: "mongodb://localhost:27017"})
+	if err != nil {
+		panic(err)
+	}
+	RealColl = client.Database("stock").Collection("realStock")
+}
 
 // Expression 三元表达式
 func Expression(b bool, true interface{}, false interface{}) interface{} {
@@ -19,17 +30,6 @@ func Expression(b bool, true interface{}, false interface{}) interface{} {
 		return true
 	}
 	return false
-}
-
-// InitMongo 初始化连接
-func InitMongo() *qmgo.Collection {
-	// docker连接: host.docker.internal
-	client, err := qmgo.NewClient(ctx, &qmgo.Config{Uri: "mongodb://localhost:27017"})
-	if err != nil {
-		panic(err)
-	}
-	coll := client.Database("stock").Collection("realStock")
-	return coll
 }
 
 // UpdateMongo 更新实时数据至Mongo
