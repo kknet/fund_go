@@ -11,12 +11,14 @@ import (
 func Authorize(c *gin.Context) {
 	token := c.GetHeader("token")
 	claims, err := parseToken(token)
+
 	if err != nil {
-		c.JSON(http.StatusBadRequest, bson.M{
+		c.JSON(http.StatusUnauthorized, bson.M{
 			"status": false, "msg": "请先登录",
 		})
 		c.Abort()
 	} else {
+		// 用户id
 		c.Set("id", claims.Id)
 	}
 }

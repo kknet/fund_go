@@ -181,27 +181,22 @@ func GetMembers(c *gin.Context) {
 	})
 }
 
-// GetTicks 获取五档盘口、成交明细
-func GetTicks(c *gin.Context) {
+// ViewItemsPage 详情页面汇总数据
+func ViewItemsPage(c *gin.Context) {
 	code := c.Query("code")
-	data := GetRealTicks(code, 50)
+	items := GetStock(code, true)
+	if len(items) == 0 {
+		c.JSON(200, gin.H{
+			"status": false, "msg": "code不存在",
+		})
+		return
+	}
+	pankou, ticks := GetRealTicks(items)
+	view := viewPage(code)
+
 	c.JSON(200, gin.H{
-		"status": true, "data": data,
+		"status": true, "data": bson.M{
+			"items": items, "ticks": ticks, "pankou": pankou, "view": view,
+		},
 	})
 }
-
-// ViewStock 访问某只股票
-//func ViewStock(c *gin.Context) {
-//	code := c.Query("code")
-//	exists := GetStock(code)
-//	if len(exists) > 0 {
-//		count := viewPage(code)
-//		c.JSON(200, gin.H{
-//			"status": true, "data": count,
-//		})
-//	} else {
-//		c.JSON(200, gin.H{
-//			"status": false, "msg": "代码不存在",
-//		})
-//	}
-//}

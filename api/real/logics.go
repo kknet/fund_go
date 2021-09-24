@@ -6,6 +6,7 @@ import (
 	"fund_go2/download"
 	"github.com/go-gota/gota/dataframe"
 	"github.com/go-gota/gota/series"
+	"github.com/go-redis/redis/v8"
 	jsoniter "github.com/json-iterator/go"
 	"go.mongodb.org/mongo-driver/bson"
 	"strconv"
@@ -25,6 +26,9 @@ const (
 var json = jsoniter.ConfigCompatibleWithStandardLibrary
 var ctx = context.Background()
 
+// 访问热度 redis
+var hotDB *redis.Client
+
 // query options
 var basicOpt = bson.M{
 	"_id": 0, "cid": 1, "code": 1, "name": 1, "type": 1, "marketType": 1,
@@ -35,6 +39,13 @@ var basicOpt = bson.M{
 var searchOpt = bson.M{
 	"_id": 0, "code": 1, "name": 1, "type": 1, "marketType": 1,
 	"price": 1, "pct_chg": 1, "amount": 1,
+}
+
+func init() {
+	hotDB = redis.NewClient(&redis.Options{
+		Addr: "localhost:6379",
+		DB:   1,
+	})
 }
 
 // GetStock 获取单只股票
@@ -297,33 +308,31 @@ func getRank(opt *common.RankOpt) []bson.M {
 }
 
 // GetRealTicks 获取五档挂单明细、分笔成交
-func GetRealTicks(code string, count int) bson.M {
-	item := GetStock(code)
-	result := bson.M{}
+func GetRealTicks(item bson.M) (bson.M, []map[string]interface{}) {
+	var ticks []map[string]interface{}
+	var pankou bson.M
 
 	cid, ok := item["cid"].(string)
 	if !ok {
-		return result
+		return nil, nil
 	}
 	group := sync.WaitGroup{}
 	group.Add(2)
 
 	// 获取盘口明细
 	go func() {
-		if item["marketType"] == "CN" {
-			body, err := common.GetAndRead(PanKouUrl + cid)
-			if err != nil {
-				return
-			}
-			var data bson.M
-			json.Get(body, "data").ToVal(&data)
-			result["pankou"] = data
+		body, err := common.GetAndRead(PanKouUrl + cid)
+		if err != nil {
+			return
 		}
+		var data bson.M
+		json.Get(body, "data").ToVal(&data)
+		pankou = data
 		group.Done()
 	}()
 	// 获取成交明细
 	go func() {
-		body, err := common.GetAndRead(TicksUrl + "&pos=-" + strconv.Itoa(count) + "&secid=" + cid)
+		body, err := common.GetAndRead(TicksUrl + "&pos=-40&secid=" + cid)
 		if err != nil {
 			return
 		}
@@ -342,11 +351,11 @@ func GetRealTicks(code string, count int) bson.M {
 			}
 			return data
 		})
-		result["ticks"] = df.Mutate(side).Maps()
+		ticks = df.Mutate(side).Maps()
 		group.Done()
 	}()
 	group.Wait()
-	return result
+	return pankou, ticks
 }
 
 // getNumbers 获取涨跌分布
@@ -424,6 +433,10 @@ func GetIndustryMembers(industryCode string) []bson.M {
 }
 
 // 查看股票页面
-func viewPage(code string) {
-
+func viewPage(code string) interface{} {
+	res, err := hotDB.ZIncrBy(ctx, "hot", 1.0, code).Result()
+	if err != nil {
+		return err
+	}
+	return res
 }

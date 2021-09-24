@@ -2,7 +2,6 @@ package common
 
 import (
 	"errors"
-	"github.com/gin-gonic/gin"
 	"io/ioutil"
 	"net/http"
 	"time"
@@ -31,8 +30,8 @@ func GetThsAndRead(url string) ([]byte, error) {
 	request, err := http.NewRequest("GET", url, nil)
 
 	//增加header选项
-	request.Header.Add("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/89.0.4389.90 Safari/537.36")
 	request.Header.Add("Referer", "http://q.10jqka.com.cn")
+	request.Header.Add("Host", "d.10jqka.com.cn")
 
 	res, err := myClient.Do(request)
 	if err != nil {
@@ -48,15 +47,7 @@ func GetThsAndRead(url string) ([]byte, error) {
 	return body, nil
 }
 
-// MyResponse 返回值
-func MyResponse(c *gin.Context, success bool, value interface{}) {
-	if success {
-		c.JSON(http.StatusOK, gin.H{
-			"status": true, "data": value,
-		})
-	} else {
-		c.JSON(http.StatusOK, gin.H{
-			"status": false, "msg": value,
-		})
-	}
+// GetTuShareAndRead Tushare专用
+func GetTuShareAndRead() {
+
 }

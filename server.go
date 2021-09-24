@@ -41,7 +41,7 @@ func main() {
 	stock.GET("/list", real.StockList)
 	stock.GET("/detail", real.StockDetail)
 	stock.GET("/chart/:chart_type", real.GetChart)
-	stock.GET("/ticks", real.GetTicks)
+	stock.GET("/page", real.ViewItemsPage)
 
 	// Market 市场数据
 	market := apiV1.Group("/market")

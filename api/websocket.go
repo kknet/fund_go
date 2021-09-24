@@ -1,6 +1,7 @@
 package apiV1
 
 import (
+	"context"
 	"fund_go2/api/real"
 	"fund_go2/download"
 	"github.com/gin-gonic/gin"
@@ -81,8 +82,12 @@ func ConnectItems(c *gin.Context) {
 // SendCList 推送消息
 func SendCList() {
 	for _, c := range StockListConnList {
+		var newData []bson.M
 		// 获取新数据
-		newData := real.GetStockList(c.codes)
+		_ = download.RealColl.Find(context.Background(), bson.M{"_id": bson.M{"$in": c.codes}}).Select(bson.M{
+			"_id": 0, "code": 1, "price": 1, "pct_chg": 1, "vol": 1, "amount": 1, "net": 1, "main_net": 1,
+		}).All(&newData)
+
 		for i := range newData {
 			if newData[i]["pct_chg"] != c.data[i]["pct_chg"] {
 				c.data[i] = newData[i]
@@ -101,16 +106,17 @@ func SendCList() {
 func SendItems() {
 	for _, c := range StockDetailConnList {
 		// 获取新数据
-		newData := real.GetStock(c.code)
+		newData := real.GetStock(c.code, true)
 		// 有更新
 		if newData["vol"] != c.data["vol"] {
 			// 详情
-			results := real.GetRealTicks(c.code, 40)
-			results["items"] = newData
+			pankou, ticks := real.GetRealTicks(newData)
 			c.data = newData
 
 			// 写入
-			err := c.Conn.Conn.WriteJSON(results)
+			err := c.Conn.Conn.WriteJSON(bson.M{
+				"items": newData, "ticks": ticks, "pankou": pankou,
+			})
 			if err != nil {
 				c.Conn.deleteConn()
 			}

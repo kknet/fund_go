@@ -99,10 +99,12 @@ func calData(df dataframe.DataFrame, marketType string) dataframe.DataFrame {
 	df = df.Mutate(code)
 
 	// net
-	avgPrice := Cal(df.Col("amount"), "/", df.Col("vol"))
-	buy := Cal(df.Col("buy"), "-", df.Col("sell"))
-	net := Cal(avgPrice, "*", buy, "net")
-	df = df.Mutate(net).Drop([]string{"buy", "sell"})
+	if df.Col("buy").Err == nil {
+		avgPrice := Cal(df.Col("amount"), "/", df.Col("vol"))
+		buy := Cal(df.Col("buy"), "-", df.Col("sell"))
+		net := Cal(avgPrice, "*", buy, "net")
+		df = df.Mutate(net).Drop([]string{"buy", "sell"})
+	}
 
 	// mc fmc tr
 	if df.Col("total_share").Err == nil {
@@ -152,7 +154,7 @@ func Cal(s1 series.Series, operation string, s2 series.Series, name ...string) s
 
 // 下载股票数据
 func getRealStock(marketType string) {
-	url := "https://push2.eastmoney.com/api/qt/clist/get?po=1&fid=f20&pz=4600&np=1&fltt=2&pn=1&fs=" + fs[marketType] + "&fields="
+	url := "http://push2.eastmoney.com/api/qt/clist/get?po=1&fid=f6&pz=4600&np=1&fltt=2&pn=1&fs=" + fs[marketType] + "&fields="
 	var tempUrl string
 	// 定时更新计数器
 	var count = MaxCount
@@ -194,8 +196,8 @@ func getRealStock(marketType string) {
 		UpdateMongo(df.Maps())
 
 		// 更新行业数据
-		if marketType == "CN" {
-			if count%10 == 0 {
+		if count%10 == 0 {
+			if marketType == "CN" {
 				go CalIndustry()
 			}
 		}
