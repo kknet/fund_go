@@ -192,12 +192,12 @@ func getRealStock(marketType string) {
 		}
 
 		df = calData(df, marketType)
-		UpdateMongo(df.Maps())
+		updateMongo(df.Maps())
 
 		// 更新行业数据
 		if count%10 == 0 {
 			if marketType == "CN" {
-				go CalIndustry()
+				go calIndustry()
 			}
 		}
 		count++

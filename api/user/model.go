@@ -13,9 +13,9 @@ var (
 
 // 用户表结构
 type user struct {
-	Id       int       `xorm:"int(10) pk not null autoincr"`
-	Username string    `xorm:"varchar(32) unique not null"`
-	Password string    `xorm:"varchar(32) not null"`
+	Id       int       `xorm:"int(8) pk not null autoincr"`
+	Username string    `xorm:"varchar(16) unique not null"`
+	Password string    `xorm:"varchar(20) not null"`
 	Phone    string    `xorm:"char(11) unique"`
 	Email    string    `xorm:"varchar(32) unique"`
 	Points   int       `xorm:"not null default 0"`
@@ -52,12 +52,13 @@ type userInfo struct {
 func init() {
 	var err error
 
-	// 连接UserDB
-	connStr := "postgres://postgres:123456@127.0.0.1:5432/user?sslmode=disable"
+	// 连接数据库
+	connStr := "postgres://POSTGRES_USER:POSTGRES_PASSWORD@fund_postgres:5432/fund?sslmode=disable"
 	userDB, err = xorm.NewEngine("postgres", connStr)
 	if err != nil {
 		panic(err)
 	}
+
 	// 建表
 	err = userDB.Sync2(new(user))
 	if err != nil {
@@ -65,7 +66,7 @@ func init() {
 	}
 	// 连接Redis
 	redisDB = redis.NewClient(&redis.Options{
-		Addr: "localhost:6379",
+		Addr: "fund_redis:6379",
 		DB:   0,
 	})
 }

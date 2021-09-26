@@ -13,11 +13,9 @@ import (
 var ctx = context.Background()
 var RealColl *qmgo.Collection
 
-// 初始化数据库库连接
+// 初始化MongoDB数据库
 func init() {
-	// MongoDB
-	// docker: host.docker.internal
-	client, err := qmgo.NewClient(ctx, &qmgo.Config{Uri: "mongodb://localhost:27017"})
+	client, err := qmgo.NewClient(ctx, &qmgo.Config{Uri: "mongodb://fund_mongo:27017"})
 	if err != nil {
 		panic(err)
 	}
@@ -32,8 +30,8 @@ func Expression(b bool, true interface{}, false interface{}) interface{} {
 	return false
 }
 
-// UpdateMongo 更新实时数据至Mongo
-func UpdateMongo(items []map[string]interface{}) {
+// 更新实时数据至Mongo
+func updateMongo(items []map[string]interface{}) {
 	group := sync.WaitGroup{}
 	group.Add(3)
 
@@ -57,8 +55,8 @@ func UpdateMongo(items []map[string]interface{}) {
 	group.Wait()
 }
 
-// CalIndustry 聚合计算行业数据
-func CalIndustry() {
+// 聚合计算行业数据
+func calIndustry() {
 	var results []bson.M
 
 	for _, idsName := range []string{"industry", "area"} {
