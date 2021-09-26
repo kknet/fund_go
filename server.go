@@ -19,7 +19,6 @@ func init() {
 }
 
 func main() {
-
 	//gin.SetMode(gin.ReleaseMode)
 
 	// 创建实例

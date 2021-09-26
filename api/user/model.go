@@ -53,7 +53,7 @@ func init() {
 	var err error
 
 	// 连接数据库
-	connStr := "postgres://POSTGRES_USER:POSTGRES_PASSWORD@fund_postgres:5432/fund?sslmode=disable"
+	connStr := "postgres://postgres:123456@fund_postgres:5432/fund?sslmode=disable"
 	userDB, err = xorm.NewEngine("postgres", connStr)
 	if err != nil {
 		panic(err)

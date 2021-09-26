@@ -15,7 +15,9 @@ var RealColl *qmgo.Collection
 
 // 初始化MongoDB数据库
 func init() {
-	client, err := qmgo.NewClient(ctx, &qmgo.Config{Uri: "mongodb://fund_mongo:27017"})
+	// fund_mongo
+	// host.docker.internal
+	client, err := qmgo.NewClient(ctx, &qmgo.Config{Uri: "mongodb://host.docker.internal:27017"})
 	if err != nil {
 		panic(err)
 	}

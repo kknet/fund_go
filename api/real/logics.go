@@ -46,7 +46,7 @@ var searchOpt = bson.M{
 
 func init() {
 	hotDB = redis.NewClient(&redis.Options{
-		Addr: "localhost:6379",
+		Addr: "fund_redis:6379",
 		DB:   1,
 	})
 }
