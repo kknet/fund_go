@@ -51,7 +51,7 @@ func parseToken(token string) (*Claims, error) {
 		// 解密token
 		if claims, ok := tokenClaims.Claims.(*Claims); ok && tokenClaims.Valid {
 
-			res, _ := redisDB.Get(ctx, strconv.Itoa(claims.Id)).Result()
+			res, _ := tokenDB.Get(ctx, strconv.Itoa(claims.Id)).Result()
 
 			if res == token {
 				return claims, nil
@@ -112,7 +112,7 @@ func login(form *loginForm) (string, error) {
 	if form.Password == info.Password {
 		token, err := generateToken(info)
 		// 将token写入redis
-		redisDB.Set(ctx, strconv.Itoa(info.Id), token, 24*time.Hour)
+		tokenDB.Set(ctx, strconv.Itoa(info.Id), token, 24*time.Hour)
 
 		return token, err
 

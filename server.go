@@ -23,6 +23,8 @@ func main() {
 
 	// 创建实例
 	r := gin.Default()
+	// 全局流量控制
+	r.Use(real.ControlLimitFunc)
 
 	// apiV1
 	apiV1 := r.Group("/api/v1")

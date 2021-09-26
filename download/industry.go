@@ -2,6 +2,7 @@ package download
 
 import (
 	"context"
+	"fund_go2/env"
 	_ "github.com/lib/pq"
 	"github.com/qiniu/qmgo"
 	"go.mongodb.org/mongo-driver/bson"
@@ -15,9 +16,7 @@ var RealColl *qmgo.Collection
 
 // 初始化MongoDB数据库
 func init() {
-	// fund_mongo
-	// host.docker.internal
-	client, err := qmgo.NewClient(ctx, &qmgo.Config{Uri: "mongodb://host.docker.internal:27017"})
+	client, err := qmgo.NewClient(ctx, &qmgo.Config{Uri: "mongodb://" + env.MongoHost})
 	if err != nil {
 		panic(err)
 	}

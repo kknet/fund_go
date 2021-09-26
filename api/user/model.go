@@ -1,6 +1,7 @@
 package user
 
 import (
+	"fund_go2/env"
 	"github.com/go-redis/redis/v8"
 	"time"
 	"xorm.io/xorm"
@@ -8,7 +9,7 @@ import (
 
 var (
 	userDB  *xorm.Engine
-	redisDB *redis.Client
+	tokenDB *redis.Client
 )
 
 // 用户表结构
@@ -53,7 +54,7 @@ func init() {
 	var err error
 
 	// 连接数据库
-	connStr := "postgres://postgres:123456@fund_postgres:5432/fund?sslmode=disable"
+	connStr := "postgres://postgres:123456@" + env.PostgresHost + "/fund?sslmode=disable"
 	userDB, err = xorm.NewEngine("postgres", connStr)
 	if err != nil {
 		panic(err)
@@ -65,8 +66,8 @@ func init() {
 		panic(err)
 	}
 	// 连接Redis
-	redisDB = redis.NewClient(&redis.Options{
-		Addr: "fund_redis:6379",
+	tokenDB = redis.NewClient(&redis.Options{
+		Addr: env.RedisHost,
 		DB:   0,
 	})
 }

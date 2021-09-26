@@ -4,6 +4,7 @@ import (
 	"context"
 	"fund_go2/common"
 	"fund_go2/download"
+	"fund_go2/env"
 	"github.com/go-gota/gota/dataframe"
 	"github.com/go-gota/gota/series"
 	"github.com/go-redis/redis/v8"
@@ -29,8 +30,11 @@ const (
 var json = jsoniter.ConfigCompatibleWithStandardLibrary
 var ctx = context.Background()
 
-// 访问热度 redis
+// 访问热度
 var hotDB *redis.Client
+
+// 流量控制
+var limitDB *redis.Client
 
 // query options
 var basicOpt = bson.M{
@@ -46,8 +50,12 @@ var searchOpt = bson.M{
 
 func init() {
 	hotDB = redis.NewClient(&redis.Options{
-		Addr: "fund_redis:6379",
+		Addr: env.RedisHost,
 		DB:   1,
+	})
+	limitDB = redis.NewClient(&redis.Options{
+		Addr: env.RedisHost,
+		DB:   2,
 	})
 }
 

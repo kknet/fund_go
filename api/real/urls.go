@@ -8,7 +8,32 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"time"
 )
+
+// ControlLimitFunc 流量控制中间件
+func ControlLimitFunc(c *gin.Context) {
+	ip, ok := c.RemoteIP()
+	if !ok {
+		return
+	}
+	// 是否存在
+	exists, _ := limitDB.Exists(ctx, ip.String()).Result()
+	if exists >= 1 {
+		times, _ := limitDB.Incr(ctx, ip.String()).Result()
+		// 半小时之内 访问次数超过4000 则拒绝
+		if times > 4000 {
+			// forbidden
+			c.JSON(http.StatusForbidden, bson.M{
+				"status": false, "msg": "请求被拦截",
+			})
+			c.Abort()
+		}
+	} else {
+		limitDB.SetEX(ctx, ip.String(), 1, time.Minute*30)
+	}
+	c.Next()
+}
 
 // CheckCodeFunc 检查代码中间件
 func CheckCodeFunc(c *gin.Context) {

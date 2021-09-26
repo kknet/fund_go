@@ -1,6 +1,7 @@
 package fina
 
 import (
+	"fund_go2/env"
 	"go.mongodb.org/mongo-driver/bson"
 	"xorm.io/xorm"
 )
@@ -10,7 +11,7 @@ var finaDB *xorm.Engine
 func init() {
 	var err error
 
-	connStr := "postgres://postgres:123456@127.0.0.1:5432/fina?sslmode=disable"
+	connStr := "postgres://postgres:123456@" + env.PostgresHost + ":5432/fina?sslmode=disable"
 	finaDB, err = xorm.NewEngine("postgres", connStr)
 	if err != nil {
 		panic(err)

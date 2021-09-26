@@ -95,7 +95,7 @@ func Login(c *gin.Context) {
 func Logout(c *gin.Context) {
 	id := c.GetInt("id")
 	// 删除token
-	err := redisDB.Del(ctx, strconv.Itoa(id)).Err()
+	err := tokenDB.Del(ctx, strconv.Itoa(id)).Err()
 
 	if err != nil {
 		c.JSON(http.StatusOK, gin.H{

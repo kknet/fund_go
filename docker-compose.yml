@@ -4,11 +4,11 @@ services:
     image: postgres
     container_name: "fund_postgres"
     volumes:
-      - pg_data:/var/lib/postgresql
+      - pg_data:/var/lib/postgresql  # 数据卷挂载
     environment:
-      - POSTGRES_DB=fund
-      - POSTGRES_USER=postgres
-      - POSTGRES_PASSWORD=123456
+      - POSTGRES_DB=fund  # 默认数据库名
+      - POSTGRES_USER=postgres  # 默认数据库用户
+      - POSTGRES_PASSWORD=123456  # 默认数据库密码
 
   mongo:
     image: mongo
