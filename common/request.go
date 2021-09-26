@@ -4,14 +4,11 @@ import (
 	"errors"
 	"io/ioutil"
 	"net/http"
-	"time"
 )
-
-var myClient = &http.Client{Timeout: 5 * time.Second}
 
 // GetAndRead 发送Get请求并读取数据
 func GetAndRead(url string) ([]byte, error) {
-	res, err := myClient.Get(url)
+	res, err := http.Get(url)
 	if err != nil {
 		return nil, errors.New("请求失败！" + err.Error())
 	}
@@ -33,7 +30,8 @@ func GetThsAndRead(url string) ([]byte, error) {
 	request.Header.Add("Referer", "http://q.10jqka.com.cn")
 	request.Header.Add("Host", "d.10jqka.com.cn")
 
-	res, err := myClient.Do(request)
+	c := &http.Client{}
+	res, err := c.Do(request)
 	if err != nil {
 		return nil, errors.New("请求失败！" + err.Error())
 	}
@@ -47,7 +45,7 @@ func GetThsAndRead(url string) ([]byte, error) {
 	return body, nil
 }
 
-// GetTuShareAndRead Tushare专用
-func GetTuShareAndRead() {
+// PostTuShareAndRead TuShare专用
+func PostTuShareAndRead() {
 
 }

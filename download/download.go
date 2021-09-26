@@ -48,15 +48,14 @@ var lowName = map[string]string{
 // 中频数据（约每分钟更新）
 var basicName = map[string]string{
 	"f17": "open", "f23": "pb", "f115": "pe_ttm", "f10": "vr",
-	"f38": "total_share", "f39": "float_share",
+	"f38": "total_share", "f39": "float_share", "f33": "wb",
 	"f267": "3day_main_net", "f164": "5day_main_net", "f174": "10day_main_net",
 }
 
 // 高频数据（毫秒级更新）
 var proName = map[string]string{
 	"f12": "code", "f2": "price", "f15": "high", "f16": "low", "f3": "pct_chg",
-	"f5": "vol", "f6": "amount", "f33": "wb", "f34": "buy", "f35": "sell",
-	"f62": "main_net",
+	"f5": "vol", "f6": "amount", "f34": "buy", "f35": "sell", "f62": "main_net",
 }
 
 // 初始化全局通道

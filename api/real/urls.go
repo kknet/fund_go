@@ -142,19 +142,17 @@ func GetMarket(c *gin.Context) {
 		return
 	}
 	if marketType == "CN" {
-		var industry, sw, area []bson.M
+		var industry, area []bson.M
 		options := bson.M{"_id": 0, "code": 1, "name": 1, "pct_chg": 1, "领涨股": 1, "max_pct": 1, "main_net": 1}
 
 		_ = download.RealColl.Find(ctx, bson.M{"type": "industry"}).Select(options).All(&industry)
-		_ = download.RealColl.Find(ctx, bson.M{"type": "sw"}).Select(options).All(&sw)
 		_ = download.RealColl.Find(ctx, bson.M{"type": "area"}).Select(options).All(&area)
 
 		c.JSON(200, gin.H{
 			"status": true, "data": bson.M{
 				"numbers":  getNumbers(marketType),
 				"industry": industry,
-				"sw":       sw,
-				"area":     []bson.M{},
+				"area":     area,
 			},
 		})
 	} else {

@@ -61,7 +61,7 @@ func UpdateMongo(items []map[string]interface{}) {
 func CalIndustry() {
 	var results []bson.M
 
-	for _, idsName := range []string{"sw", "industry"} {
+	for _, idsName := range []string{"industry", "area"} {
 		err := RealColl.Aggregate(ctx, mongo.Pipeline{
 			bson.D{{"$match", bson.M{"marketType": "CN", "type": "stock"}}},
 			bson.D{{"$sort", bson.M{"pct_chg": -1}}},

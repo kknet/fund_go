@@ -15,11 +15,12 @@ import (
 )
 
 const (
-	SimpleMinuteUrl = "http://push2.eastmoney.com/api/qt/stock/trends2/get?fields1=f10&fields2=f53&iscr=0&secid="
-	Day60Url        = "http://push2his.eastmoney.com/api/qt/stock/kline/get?fields1=f6&fields2=f53&klt=101&fqt=0&end=20500101&lmt=60&secid="
-	PanKouUrl       = "http://push2.eastmoney.com/api/qt/stock/get?fltt=2&fields=f58,f530,f135,f136,f137,f138,f139,f141,f142,f144,f145,f147,f148,f140,f143,f146,f149&secid="
-	TicksUrl        = "http://push2.eastmoney.com/api/qt/stock/details/get?fields1=f1&fields2=f51,f52,f53,f55"
-	MoneyFlowUrl    = "http://push2.eastmoney.com/api/qt/stock/fflow/kline/get?lmt=0&klt=1&fields1=f1&fields2=f53,f54,f55,f56&secid="
+	Host            = "http://push2.eastmoney.com/api/qt/stock/"
+	SimpleMinuteUrl = Host + "trends2/get?fields1=f10&fields2=f53&iscr=0&secid="
+	Day60Url        = Host + "kline/get?fields1=f6&fields2=f53&klt=101&fqt=0&end=20500101&lmt=60&secid="
+	PanKouUrl       = Host + "get?fltt=2&fields=f58,f530,f135,f136,f137,f138,f139,f141,f142,f144,f145,f147,f148,f140,f143,f146,f149.f191&secid="
+	TicksUrl        = Host + "details/get?fields1=f1&fields2=f51,f52,f53,f55"
+	MoneyFlowUrl    = Host + "fflow/kline/get?lmt=0&klt=1&fields1=f1&fields2=f53,f54,f55,f56&secid="
 )
 
 // jsoniter
@@ -53,12 +54,16 @@ func GetStock(code string, detail ...bool) bson.M {
 	var data bson.M
 	_ = download.RealColl.Find(ctx, bson.M{"_id": code}).Select(bson.M{"_id": 0, "adj_factor": 0}).One(&data)
 
+	if len(data) <= 0 {
+		return nil
+	}
+
 	if len(detail) > 0 {
 		// 添加行业数据
 		var industry []bson.M
 		_ = download.RealColl.Find(ctx, bson.M{"$or": bson.A{
 			bson.M{"_id": data["industry"], "type": "industry"},
-			bson.M{"_id": data["sw"], "type": "sw"},
+			bson.M{"_id": data["area"], "type": "area"},
 		}}).Select(bson.M{"_id": 0, "name": 1, "type": 1, "pct_chg": 1}).All(&industry)
 
 		for _, item := range industry {
