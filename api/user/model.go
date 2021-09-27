@@ -53,7 +53,7 @@ type userInfo struct {
 func init() {
 	var err error
 
-	// 连接数据库
+	// User表数据库
 	connStr := "postgres://postgres:123456@" + env.PostgresHost + "/fund?sslmode=disable"
 	userDB, err = xorm.NewEngine("postgres", connStr)
 	if err != nil {
@@ -65,7 +65,7 @@ func init() {
 	if err != nil {
 		panic(err)
 	}
-	// 连接Redis
+	// 用户token数据库
 	tokenDB = redis.NewClient(&redis.Options{
 		Addr: env.RedisHost,
 		DB:   0,

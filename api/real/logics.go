@@ -20,7 +20,7 @@ const (
 	Host2 = "http://push2his.eastmoney.com/api/qt/stock/"
 
 	SimpleMinuteUrl = Host + "trends2/get?fields1=f10&fields2=f53&iscr=0&secid="
-	Day60Url        = Host2 + "/kline/get?fields1=f6&fields2=f53&klt=101&fqt=0&end=20500101&lmt=60&secid="
+	Day60Url        = Host2 + "kline/get?fields1=f6&fields2=f53&klt=101&fqt=0&end=20500101&lmt=60&secid="
 	PanKouUrl       = Host + "get?fltt=2&fields=f58,f530,f135,f136,f137,f138,f139,f141,f142,f144,f145,f147,f148,f140,f143,f146,f149&secid="
 	TicksUrl        = Host + "details/get?fields1=f1&fields2=f51,f52,f53,f55"
 	MoneyFlowUrl    = Host + "fflow/kline/get?lmt=0&klt=1&fields1=f1&fields2=f53,f54,f55,f56&secid="
@@ -69,19 +69,14 @@ func GetStock(code string, detail ...bool) bson.M {
 	}
 
 	if len(detail) > 0 {
-		// 添加行业数据
-		var industry []bson.M
-		_ = download.RealColl.Find(ctx, bson.M{"$or": bson.A{
-			bson.M{"_id": data["industry"], "type": "industry"},
-			bson.M{"_id": data["area"], "type": "area"},
-		}}).Select(bson.M{"_id": 0, "name": 1, "type": 1, "pct_chg": 1}).All(&industry)
+		var bk []bson.M
 
-		for _, item := range industry {
-			ids, ok := item["type"].(string)
-			if ok {
-				data[ids] = item
-			}
-		}
+		_ = download.RealColl.Find(ctx, bson.M{
+			"_id": bson.M{"$in": data["bk"]},
+			// 排序是为了控制板块顺序，industry最先，concept在中间，area最后
+		}).Select(bson.M{"_id": 0, "name": 1, "type": 1, "pct_chg": 1}).Sort("-type").All(&bk)
+		data["bk"] = bk
+
 		// 添加市场状态
 		marketType := data["marketType"].(string)
 		data["status"] = download.Status[marketType]
@@ -116,7 +111,7 @@ func GetStockList(codes []string) []bson.M {
 // GetIndustryMinute 获取同花顺行业分时行情
 func GetIndustryMinute(code string) interface{} {
 	symbol := strings.Split(code, ".")[0]
-	body, err := common.GetThsAndRead("http://d.10jqka.com.cn/v6/time/bk_" + symbol + "/defer/last.js")
+	body, err := common.GetThsAndRead("http://d.10jqka.com.cn/v6/time/bk_" + symbol + "/last.js")
 	if err != nil {
 		return err
 	}
@@ -140,10 +135,7 @@ func GetIndustryMinute(code string) interface{} {
 func AddSimpleMinute(items bson.M) {
 	cid, ok := items["cid"].(string)
 	if !ok {
-		// 同花顺行业
-		if strings.Split(items["code"].(string), ".")[1] == "SI" {
-			getThsSimpleMinute(items)
-		}
+		getThsSimpleMinute(items)
 		return
 	}
 	var info []string

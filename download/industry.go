@@ -58,48 +58,50 @@ func updateMongo(items []map[string]interface{}) {
 
 // 聚合计算行业数据
 func calIndustry() {
-	var results []bson.M
+	var res bson.M
+	var BKData []bson.M
 
-	for _, idsName := range []string{"industry", "area"} {
-		err := RealColl.Aggregate(ctx, mongo.Pipeline{
-			bson.D{{"$match", bson.M{"marketType": "CN", "type": "stock"}}},
-			bson.D{{"$sort", bson.M{"pct_chg": -1}}},
-			bson.D{{"$group", bson.M{
-				"_id":         "$" + idsName,
-				"max_pct":     bson.M{"$first": "$pct_chg"},
-				"领涨股":         bson.M{"$first": "$name"},
-				"main_net":    bson.M{"$sum": "$main_net"},
-				"net":         bson.M{"$sum": "$net"},
-				"vol":         bson.M{"$sum": "$vol"},
-				"amount":      bson.M{"$sum": "$amount"},
-				"mc":          bson.M{"$sum": "$mc"},
-				"fmc":         bson.M{"$sum": "$fmc"},
-				"revenue_yoy": bson.M{"$avg": "$revenue_yoy"},
-				"income_yoy":  bson.M{"$avg": "$income_yoy"},
-				"roe":         bson.M{"$avg": "$roe"},
-				"pe_ttm":      bson.M{"$avg": "$pe_ttm"},
-				"pb":          bson.M{"$avg": "$pb"},
-				"float_share": bson.M{"$sum": "$float_share"},
-				"power":       bson.M{"$sum": bson.M{"$multiply": bson.A{"$fmc", "$pct_chg"}}},
-			}}},
-		}).All(&results)
+	for _, idsName := range []string{"industry", "area", "concept"} {
+		err := RealColl.Find(ctx, bson.M{"type": idsName}).Select(bson.M{"members": 1}).All(&BKData)
 		if err != nil {
-			log.Println("CalIndustry聚合错误: ", err)
+			log.Println("calIndustry查找"+idsName+"错误: ", err)
 		}
 
-		for _, i := range results {
-			_, ok := i["_id"].(string)
-			if !ok {
-				continue
-			}
-			i["tr"] = float64(i["vol"].(int32)) / i["float_share"].(float64) * 10000
-			i["pct_chg"] = i["power"].(float64) / i["fmc"].(float64)
-			delete(i, "power")
-			delete(i, "float_share")
+		for _, bk := range BKData {
+			_ = RealColl.Aggregate(ctx, mongo.Pipeline{
+				// 不包括新股
+				bson.D{{"$match", bson.M{"_id": bson.M{"$in": bk["members"]}, "pct_chg": bson.M{"$lte": 21}}}},
+				bson.D{{"$sort", bson.M{"pct_chg": -1}}},
+				bson.D{{"$group", bson.M{
+					"_id":         nil,
+					"max_pct":     bson.M{"$first": "$pct_chg"},
+					"领涨股":         bson.M{"$first": "$name"},
+					"pct_chg":     bson.M{"$avg": "$pct_chg"},
+					"main_net":    bson.M{"$sum": "$main_net"},
+					"net":         bson.M{"$sum": "$net"},
+					"vol":         bson.M{"$sum": "$vol"},
+					"amount":      bson.M{"$sum": "$amount"},
+					"mc":          bson.M{"$sum": "$mc"},
+					"revenue_yoy": bson.M{"$avg": "$revenue_yoy"},
+					"income_yoy":  bson.M{"$avg": "$income_yoy"},
+					"roe":         bson.M{"$avg": "$roe"},
+					"pe_ttm":      bson.M{"$avg": "$pe_ttm"},
+					"pb":          bson.M{"$avg": "$pb"},
+					"float_share": bson.M{"$sum": "$float_share"},
+				}}},
+			}).One(&res)
 
-			err = RealColl.UpdateId(ctx, i["_id"], bson.M{"$set": i})
+			res["_id"] = bk["_id"]
+			// 更新
+			fShare, ok := res["float_share"].(float64)
+			if ok {
+				res["tr"] = float64(res["vol"].(int32)) / fShare * 10000
+				delete(res, "float_share")
+			}
+
+			err = RealColl.UpdateId(ctx, res["_id"], bson.M{"$set": res})
 			if err != nil {
-				log.Println("CalIndustry更新错误: ", err)
+				log.Println("calIndustry更新错误: ", err)
 			}
 		}
 	}
