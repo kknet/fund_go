@@ -450,33 +450,24 @@ func viewPage(code string) interface{} {
 
 // GetSimpleBK 获取市场板块简略信息（已排序）
 func GetSimpleBK(idsName string) []bson.M {
-	options := bson.M{"_id": 0, "code": 1, "name": 1, "pct_chg": 1, "领涨股": 1, "max_pct": 1, "main_net": 1}
-
-	var temp []bson.M
+	// sync Map
 	results := sync.Map{}
 
-	query := download.RealColl.Find(ctx, bson.M{"type": idsName}).Select(options)
+	query := download.RealColl.Find(ctx, bson.M{"type": idsName}).
+		Select(bson.M{"_id": 0, "code": 1, "name": 1, "pct_chg": 1, "领涨股": 1, "max_pct": 1, "main_net": 1})
 
-	temp = []bson.M{}
-	_ = query.Sort("pct_chg").Limit(6).All(&temp)
-	for _, i := range temp {
-		results.Store(i["code"], i)
+	myFunc := func(sortName string, limit int64) {
+		var temp []bson.M
+		_ = query.Sort(sortName).Limit(limit).All(&temp)
+		for _, i := range temp {
+			results.Store(i["code"], i)
+		}
 	}
-	temp = []bson.M{}
-	_ = query.Sort("-pct_chg").Limit(6).All(&temp)
-	for _, i := range temp {
-		results.Store(i["code"], i)
-	}
-	temp = []bson.M{}
-	_ = query.Sort("main_net").Limit(4).All(&temp)
-	for _, i := range temp {
-		results.Store(i["code"], i)
-	}
-	temp = []bson.M{}
-	_ = query.Sort("-main_net").Limit(4).All(&temp)
-	for _, i := range temp {
-		results.Store(i["code"], i)
-	}
+
+	myFunc("pct_chg", 6)
+	myFunc("-pct_chg", 6)
+	myFunc("main_net", 4)
+	myFunc("-main_net", 4)
 
 	var data []bson.M
 	results.Range(func(key, value interface{}) bool {
