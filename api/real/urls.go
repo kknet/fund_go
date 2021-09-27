@@ -2,7 +2,6 @@ package real
 
 import (
 	"fund_go2/common"
-	"fund_go2/download"
 	"github.com/gin-gonic/gin"
 	"go.mongodb.org/mongo-driver/bson"
 	"net/http"
@@ -167,19 +166,13 @@ func GetMarket(c *gin.Context) {
 		return
 	}
 	if marketType == "CN" {
-		var industry, area, concept []bson.M
-		options := bson.M{"_id": 0, "code": 1, "name": 1, "pct_chg": 1, "领涨股": 1, "max_pct": 1, "main_net": 1}
-
-		_ = download.RealColl.Find(ctx, bson.M{"type": "industry"}).Select(options).All(&industry)
-		_ = download.RealColl.Find(ctx, bson.M{"type": "concept"}).Select(options).All(&concept)
-		_ = download.RealColl.Find(ctx, bson.M{"type": "area"}).Select(options).All(&area)
 
 		c.JSON(200, gin.H{
 			"status": true, "data": bson.M{
 				"numbers":  getNumbers(marketType),
-				"industry": industry,
-				"concept":  concept,
-				"area":     area,
+				"industry": GetSimpleBK("industry"),
+				"concept":  GetSimpleBK("concept"),
+				"area":     GetSimpleBK("area"),
 			},
 		})
 	} else {
