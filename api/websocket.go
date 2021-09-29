@@ -85,7 +85,7 @@ func SendCList() {
 		var newData []bson.M
 		// 获取新数据
 		_ = download.RealColl.Find(context.Background(), bson.M{"_id": bson.M{"$in": c.codes}}).Select(bson.M{
-			"_id": 0, "code": 1, "price": 1, "pct_chg": 1, "vol": 1, "amount": 1, "net": 1, "main_net": 1,
+			"price": 1, "pct_chg": 1, "vol": 1, "amount": 1, "net": 1, "main_net": 1,
 		}).All(&newData)
 
 		for i := range newData {

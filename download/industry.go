@@ -40,7 +40,7 @@ func updateMongo(items []map[string]interface{}) {
 		// 使用bulk_write 批量写入
 		myBulk := RealColl.Bulk()
 		for _, i := range s {
-			myBulk = myBulk.UpdateId(i["code"], bson.M{"$set": i})
+			myBulk = myBulk.UpdateId(i["_id"], bson.M{"$set": i})
 		}
 		_, err := myBulk.Run(ctx)
 		if err != nil {

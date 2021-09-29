@@ -54,7 +54,7 @@ var basicName = map[string]string{
 
 // 高频数据（毫秒级更新）
 var proName = map[string]string{
-	"f12": "code", "f2": "price", "f15": "high", "f16": "low", "f3": "pct_chg",
+	"f12": "_id", "f2": "price", "f15": "high", "f16": "low", "f3": "pct_chg",
 	"f5": "vol", "f6": "amount", "f34": "buy", "f35": "sell", "f62": "main_net",
 }
 
@@ -71,8 +71,8 @@ func getGlobalChan() chan string {
 
 // 计算股票指标
 func calData(df dataframe.DataFrame, marketType string) dataframe.DataFrame {
-
-	code := df.Col("code")
+	// code 改为 _id
+	code := df.Col("_id")
 
 	// 格式化cid
 	cid := df.Col("cid")
@@ -105,6 +105,10 @@ func calData(df dataframe.DataFrame, marketType string) dataframe.DataFrame {
 		df = df.Mutate(net).Drop([]string{"buy", "sell"})
 	}
 
+	if marketType == "CNIndex" {
+		return df
+	}
+
 	// mc fmc tr
 	if df.Col("total_share").Err == nil {
 		df = df.Filter(dataframe.F{Colname: "total_share", Comparator: series.Greater, Comparando: 0})
@@ -125,11 +129,10 @@ func calData(df dataframe.DataFrame, marketType string) dataframe.DataFrame {
 		}
 		df = df.Mutate(tr)
 	}
-
 	return df
 }
 
-// Cal series进行向量运算
+// Cal series向量运算
 func Cal(s1 series.Series, operation string, s2 series.Series, name ...string) series.Series {
 	v1 := mat.NewVecDense(s1.Len(), s1.Float())
 	v2 := mat.NewVecDense(s2.Len(), s2.Float())
@@ -169,7 +172,7 @@ func getRealStock(marketType string) {
 
 		body, err := common.GetAndRead(tempUrl)
 		if err != nil {
-			log.Println("下载股票数据失败，3秒后重试...", err.Error())
+			log.Println("下载股票数据失败，3秒后重试...", err)
 			time.Sleep(time.Second * 3)
 			continue
 		}

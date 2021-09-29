@@ -38,14 +38,13 @@ var limitDB *redis.Client
 
 // query options
 var basicOpt = bson.M{
-	"_id": 0, "cid": 1, "code": 1, "name": 1, "type": 1, "marketType": 1,
-	"close": 1, "price": 1, "pct_chg": 1, "amount": 1, "mc": 1, "tr": 1,
+	"cid": 1, "name": 1, "type": 1, "marketType": 1, "close": 1,
+	"price": 1, "pct_chg": 1, "amount": 1, "mc": 1, "tr": 1,
 	"net": 1, "main_net": 1, "roe": 1, "income_yoy": 1, "revenue_yoy": 1,
 }
 
 var searchOpt = bson.M{
-	"_id": 0, "code": 1, "name": 1, "type": 1, "marketType": 1,
-	"price": 1, "pct_chg": 1, "amount": 1,
+	"name": 1, "type": 1, "marketType": 1, "price": 1, "pct_chg": 1, "amount": 1,
 }
 
 func init() {
@@ -62,7 +61,7 @@ func init() {
 // GetStock 获取单只股票
 func GetStock(code string, detail ...bool) bson.M {
 	var data bson.M
-	_ = download.RealColl.Find(ctx, bson.M{"_id": code}).Select(bson.M{"_id": 0, "adj_factor": 0}).One(&data)
+	_ = download.RealColl.Find(ctx, bson.M{"_id": code}).Select(bson.M{"adj_factor": 0}).One(&data)
 
 	if len(data) <= 0 {
 		return nil
@@ -74,7 +73,7 @@ func GetStock(code string, detail ...bool) bson.M {
 		_ = download.RealColl.Find(ctx, bson.M{
 			"_id": bson.M{"$in": data["bk"]},
 			// 排序是为了控制板块顺序，industry最先，concept在中间，area最后
-		}).Select(bson.M{"_id": 0, "name": 1, "type": 1, "pct_chg": 1}).Sort("-type").All(&bk)
+		}).Select(bson.M{"name": 1, "type": 1, "pct_chg": 1}).Sort("-type").All(&bk)
 		data["bk"] = bk
 
 		// 添加市场状态
@@ -90,16 +89,12 @@ func GetStockList(codes []string) []bson.M {
 	results := make([]bson.M, 0)
 	data := make([]bson.M, 0)
 
-	_ = download.RealColl.Find(ctx, bson.M{"_id": bson.M{"$in": codes}}).Select(bson.M{
-		"_id": 0, "cid": 1, "code": 1, "name": 1, "type": 1, "marketType": 1,
-		"close": 1, "price": 1, "pct_chg": 1, "amount": 1, "mc": 1,
-		"net": 1, "main_net": 1, "roe": 1, "income_yoy": 1, "revenue_yoy": 1,
-	}).All(&data)
+	_ = download.RealColl.Find(ctx, bson.M{"_id": bson.M{"$in": codes}}).Select(basicOpt).All(&data)
 
 	// 排序
 	for _, c := range codes {
 		for _, item := range data {
-			if c == item["code"] {
+			if c == item["_id"] {
 				results = append(results, item)
 				break
 			}
@@ -138,34 +133,31 @@ func AddSimpleMinute(items bson.M) {
 		getThsSimpleMinute(items)
 		return
 	}
-	var info []string
-
 	body, err := common.GetAndRead(SimpleMinuteUrl + cid)
 	if err != nil {
 		return
 	}
 
+	var info []string
 	data := json.Get(body, "data")
 	total := data.Get("trendsTotal").ToInt()
 	data.Get("trends").ToVal(&info)
 
-	// 间隔
-	space := 3
 	results := make([]float64, 0)
 
-	for i := 0; i < len(info); i += space {
+	for i := 0; i < len(info); i += 3 {
 		item := strings.Split(info[i], ",")
 		data, _ := strconv.ParseFloat(item[1], 8)
 		results = append(results, data)
 	}
 
 	items["chart"] = bson.M{
-		"total": total / space, "price": results, "close": items["close"], "type": "price",
+		"total": total / 3, "price": results, "close": items["close"], "type": "price",
 	}
 }
 
 func getThsSimpleMinute(items bson.M) {
-	code := items["code"].(string)
+	code := items["_id"].(string)
 	symbol := strings.Split(code, ".")
 	code = "bk_" + symbol[0]
 
@@ -296,8 +288,7 @@ func getRank(opt *common.RankOpt) []bson.M {
 	var results []bson.M
 
 	var rankOpt = bson.M{
-		"_id": 0, "cid": 1, "code": 1, "name": 1, "type": 1,
-		"close": 1, "price": 1, "pct_chg": 1,
+		"cid": 1, "name": 1, "type": 1, "close": 1, "price": 1, "pct_chg": 1,
 	}
 
 	// 添加指定参数
@@ -454,13 +445,13 @@ func GetSimpleBK(idsName string) []bson.M {
 	results := sync.Map{}
 
 	query := download.RealColl.Find(ctx, bson.M{"type": idsName}).
-		Select(bson.M{"_id": 0, "code": 1, "name": 1, "pct_chg": 1, "领涨股": 1, "max_pct": 1, "main_net": 1})
+		Select(bson.M{"name": 1, "pct_chg": 1, "领涨股": 1, "max_pct": 1, "main_net": 1})
 
 	myFunc := func(sortName string, limit int64) {
 		var temp []bson.M
 		_ = query.Sort(sortName).Limit(limit).All(&temp)
 		for _, i := range temp {
-			results.Store(i["code"], i)
+			results.Store(i["_id"], i)
 		}
 	}
 

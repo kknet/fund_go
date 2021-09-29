@@ -1,8 +1,8 @@
 version: '2'
 services:
   pg:
-    image: postgres
-    container_name: "fund_postgres"
+    image: postgres  # 基础镜像
+    container_name: "fund_postgres"  # 容器名称
     volumes:
       - pg_data:/var/lib/postgresql  # 数据卷挂载
     environment:
@@ -24,9 +24,8 @@ services:
 
   web_go:
     container_name: "fund_go"
-#    restart: always
-    build: .
-    ports:
+    build: .  # Dockerfile文件目录
+    ports:  # 暴露端口
       - "10888:10888"
     links:
       - pg
@@ -37,19 +36,18 @@ services:
       - redis
       - mongo
 
-#  web_py:
-#    container_name: "fund_py"
-#    build: C:/Users/lucario/PycharmProjects/fund/
-#    command: python manage.py runserver 0.0.0.0:5000
-#    restart: always
-#    ports:
-#      - "5000:5000"
-#    links:
-#      - pg
-#      - mongo
-#    depends_on:
-#      - pg
-#      - mongo
+  web_py:
+    container_name: "fund_py"
+    build: C:/Users/lucario/PycharmProjects/fund/  # Dockerfile文件目录
+    command: python manage.py runserver 0.0.0.0:5000  # 运行容器时运行命令
+    ports:
+      - "5000:5000"
+    links:
+      - pg
+      - mongo
+    depends_on:
+      - pg
+      - mongo
 
 volumes: # 数据卷
   pg_data: {}

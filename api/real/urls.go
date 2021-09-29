@@ -20,18 +20,18 @@ func ControlLimitFunc(c *gin.Context) {
 	exists, _ := limitDB.Exists(ctx, ip.String()).Result()
 	if exists >= 1 {
 		times, _ := limitDB.Incr(ctx, ip.String()).Result()
-		// 半小时之内 访问次数超过4000 则拒绝
-		if times > 4000 {
+		// 一分钟之内 访问次数超过60 则拒绝
+		if times > 60 {
 			// forbidden
 			c.JSON(http.StatusForbidden, bson.M{
-				"status": false, "msg": "请求被拦截",
+				"status": false, "msg": "请不要频繁访问接口！",
 			})
 			c.Abort()
 		}
 	} else {
-		limitDB.SetEX(ctx, ip.String(), 1, time.Minute*30)
+		limitDB.SetEX(ctx, ip.String(), 1, time.Minute)
+		c.Next()
 	}
-	c.Next()
 }
 
 // CheckCodeFunc 检查代码中间件
