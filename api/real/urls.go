@@ -54,12 +54,12 @@ func GetChart(c *gin.Context) {
 	switch chartType {
 	// 资金博弈
 	case "zjby":
-		data := GetDetailMoneyFlow(code)
+		data := getDetailMoneyFlow(code)
 		c.JSON(http.StatusOK, gin.H{
 			"status": true, "data": data,
 		})
 	case "minute":
-		data := GetIndustryMinute(code)
+		data := getIndustryMinute(code)
 		c.JSON(http.StatusOK, gin.H{
 			"status": true, "data": data,
 		})
@@ -88,11 +88,11 @@ func StockList(c *gin.Context) {
 	// 可指定chart, 获取简略图表数据
 	switch c.Query("chart") {
 	case "minute", "trends":
-		data = common.GoFunc(data, AddSimpleMinute)
+		data = common.GoFunc(data, addSimpleMinute)
 	case "60day":
-		data = common.GoFunc(data, Add60day)
+		data = common.GoFunc(data, add60day)
 	case "main_net":
-		data = common.GoFunc(data, AddMainFlow)
+		data = common.GoFunc(data, addMainFlow)
 	}
 	c.JSON(200, gin.H{
 		"status": true, "data": data,
@@ -130,11 +130,11 @@ func GetRank(c *gin.Context) {
 	// 可指定chart, 获取简略图表数据
 	switch c.Query("chart") {
 	case "minute", "trends":
-		data = common.GoFunc(data, AddSimpleMinute)
+		data = common.GoFunc(data, addSimpleMinute)
 	case "60day":
-		data = common.GoFunc(data, Add60day)
+		data = common.GoFunc(data, add60day)
 	case "main_net":
-		data = common.GoFunc(data, AddMainFlow)
+		data = common.GoFunc(data, addMainFlow)
 	}
 	c.JSON(200, gin.H{
 		"status": true, "data": data,
@@ -170,9 +170,9 @@ func GetMarket(c *gin.Context) {
 		c.JSON(200, gin.H{
 			"status": true, "data": bson.M{
 				"numbers":  getNumbers(marketType),
-				"industry": GetSimpleBK("industry"),
-				"concept":  GetSimpleBK("concept"),
-				"area":     GetSimpleBK("area"),
+				"industry": getSimpleBK("industry"),
+				"concept":  getSimpleBK("concept"),
+				"area":     getSimpleBK("area"),
 			},
 		})
 	} else {
@@ -192,8 +192,8 @@ func GetMembers(c *gin.Context) {
 			"status": false, "msg": "必须指定code参数",
 		})
 	}
-	data := GetIndustryMembers(code)
-	data = common.GoFunc(data, AddSimpleMinute)
+	data := getIndustryMembers(code)
+	data = common.GoFunc(data, addSimpleMinute)
 	c.JSON(200, gin.H{
 		"status": true, "data": data,
 	})

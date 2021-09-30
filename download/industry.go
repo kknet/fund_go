@@ -12,7 +12,7 @@ import (
 )
 
 var ctx = context.Background()
-var RealColl *qmgo.Collection
+var realColl *qmgo.Collection
 
 // 初始化MongoDB数据库
 func init() {
@@ -20,7 +20,7 @@ func init() {
 	if err != nil {
 		panic(err)
 	}
-	RealColl = client.Database("stock").Collection("realStock")
+	realColl = client.Database("stock").Collection("realStock")
 }
 
 // Expression 三元表达式
@@ -38,7 +38,7 @@ func updateMongo(items []map[string]interface{}) {
 
 	myFunc := func(s []map[string]interface{}) {
 		// 使用bulk_write 批量写入
-		myBulk := RealColl.Bulk()
+		myBulk := realColl.Bulk()
 		for _, i := range s {
 			myBulk = myBulk.UpdateId(i["_id"], bson.M{"$set": i})
 		}
@@ -62,13 +62,13 @@ func calIndustry() {
 	var BKData []bson.M
 
 	for _, idsName := range []string{"industry", "area", "concept"} {
-		err := RealColl.Find(ctx, bson.M{"type": idsName}).Select(bson.M{"members": 1}).All(&BKData)
+		err := realColl.Find(ctx, bson.M{"type": idsName}).Select(bson.M{"members": 1}).All(&BKData)
 		if err != nil {
 			log.Println("calIndustry查找"+idsName+"错误: ", err)
 		}
 
 		for _, bk := range BKData {
-			_ = RealColl.Aggregate(ctx, mongo.Pipeline{
+			_ = realColl.Aggregate(ctx, mongo.Pipeline{
 				// 不包括新股
 				bson.D{{"$match", bson.M{"_id": bson.M{"$in": bk["members"]}, "pct_chg": bson.M{"$lte": 21}}}},
 				bson.D{{"$sort", bson.M{"pct_chg": -1}}},
@@ -99,7 +99,7 @@ func calIndustry() {
 				delete(res, "float_share")
 			}
 
-			err = RealColl.UpdateId(ctx, res["_id"], bson.M{"$set": res})
+			err = realColl.UpdateId(ctx, res["_id"], bson.M{"$set": res})
 			if err != nil {
 				log.Println("calIndustry更新错误: ", err)
 			}

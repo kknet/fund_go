@@ -12,57 +12,63 @@ import (
 	"time"
 )
 
-var json = jsoniter.ConfigCompatibleWithStandardLibrary
-var MyChan = getGlobalChan()
-
 // 更新频率
 const (
 	MaxCount = 500
 	MidCount = 10
 )
 
-// Status 市场状态：是否开市
-var Status = sync.Map{}
+var (
+	json = jsoniter.ConfigCompatibleWithStandardLibrary
+	// MyChan 全局通道
+	MyChan chan string
 
-// StatusName 市场状态描述：盘前交易、交易中、休市中、已收盘、休市
-var StatusName = sync.Map{}
+	// Status 市场状态：是否开市
+	Status = sync.Map{}
 
-// 市场参数
-var fs = map[string]string{
-	"CNIndex": "m:1+s:2,m:0+t:5",
-	"CN":      "m:0+t:6,m:0+t:80,m:1+t:2,m:1+t:23",
-	"HK":      "m:116+t:1,m:116+t:2,m:116+t:3,m:116+t:4",
-	"US":      "m:105,m:106,m:107",
-}
+	// StatusName 市场状态描述：盘前交易、交易中、休市中、已收盘、休市
+	StatusName = sync.Map{}
 
-// 低频数据（开盘时更新）
-var lowName = map[string]string{
-	"f13": "cid", "f14": "name", "f18": "close",
-	"f37": "roe", "f40": "revenue", "f41": "revenue_yoy", "f45": "income", "f46": "income_yoy",
-}
+	// 市场参数
+	fs = map[string]string{
+		"CNIndex": "m:1+s:2,m:0+t:5",
+		"CN":      "m:0+t:6,m:0+t:80,m:1+t:2,m:1+t:23",
+		"HK":      "m:116+t:1,m:116+t:2,m:116+t:3,m:116+t:4",
+		"US":      "m:105,m:106,m:107",
+	}
+	// 低频数据（开盘时更新）
+	lowName = map[string]string{
+		"f13": "cid", "f14": "name", "f18": "close",
+		"f37": "roe", "f40": "revenue", "f41": "revenue_yoy", "f45": "income", "f46": "income_yoy",
+	}
+	// 中频数据（约每分钟更新）
+	basicName = map[string]string{
+		"f17": "open", "f23": "pb", "f115": "pe_ttm", "f10": "vr",
+		"f38": "total_share", "f39": "float_share", "f33": "wb",
+		"f267": "3day_main_net", "f164": "5day_main_net", "f174": "10day_main_net",
+	}
+	// 高频数据（毫秒级更新）
+	proName = map[string]string{
+		"f12": "_id", "f2": "price", "f15": "high", "f16": "low", "f3": "pct_chg",
+		"f5": "vol", "f6": "amount", "f34": "buy", "f35": "sell", "f62": "main_net",
+	}
+)
 
-// 中频数据（约每分钟更新）
-var basicName = map[string]string{
-	"f17": "open", "f23": "pb", "f115": "pe_ttm", "f10": "vr",
-	"f38": "total_share", "f39": "float_share", "f33": "wb",
-	"f267": "3day_main_net", "f164": "5day_main_net", "f174": "10day_main_net",
-}
-
-// 高频数据（毫秒级更新）
-var proName = map[string]string{
-	"f12": "_id", "f2": "price", "f15": "high", "f16": "low", "f3": "pct_chg",
-	"f5": "vol", "f6": "amount", "f34": "buy", "f35": "sell", "f62": "main_net",
-}
-
-// 初始化全局通道
-func getGlobalChan() chan string {
-	var ch chan string
+func init() {
+	// 初始化全局通道
 	var chanOnceManager sync.Once
 
 	chanOnceManager.Do(func() {
-		ch = make(chan string)
+		MyChan = make(chan string)
 	})
-	return ch
+
+	// map
+	Status.Store("CN", false)
+	Status.Store("HK", false)
+	Status.Store("US", false)
+	StatusName.Store("CN", "")
+	StatusName.Store("HK", "")
+	StatusName.Store("US", "")
 }
 
 // 计算股票指标

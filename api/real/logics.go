@@ -2,6 +2,7 @@ package real
 
 import (
 	"context"
+	"fmt"
 	"fund_go2/common"
 	"fund_go2/download"
 	"fund_go2/env"
@@ -9,50 +10,55 @@ import (
 	"github.com/go-gota/gota/series"
 	"github.com/go-redis/redis/v8"
 	jsoniter "github.com/json-iterator/go"
+	"github.com/qiniu/qmgo"
 	"go.mongodb.org/mongo-driver/bson"
 	"strconv"
 	"strings"
 	"sync"
 )
 
+// 东方财富url
 const (
-	Host  = "http://push2.eastmoney.com/api/qt/stock/"
-	Host2 = "http://push2his.eastmoney.com/api/qt/stock/"
-
-	SimpleMinuteUrl = Host + "trends2/get?fields1=f10&fields2=f53&iscr=0&secid="
-	Day60Url        = Host2 + "kline/get?fields1=f6&fields2=f53&klt=101&fqt=0&end=20500101&lmt=60&secid="
-	PanKouUrl       = Host + "get?fltt=2&fields=f58,f530,f135,f136,f137,f138,f139,f141,f142,f144,f145,f147,f148,f140,f143,f146,f149&secid="
-	TicksUrl        = Host + "details/get?fields1=f1&fields2=f51,f52,f53,f55"
-	MoneyFlowUrl    = Host + "fflow/kline/get?lmt=0&klt=1&fields1=f1&fields2=f53,f54,f55,f56&secid="
+	SimpleMinuteUrl = "http://push2.eastmoney.com/api/qt/stock/trends2/get?fields1=f10&fields2=f53&iscr=0&secid="
+	Day60Url        = "http://push2his.eastmoney.com/api/qt/stock/kline/get?fields1=f6&fields2=f53&klt=101&fqt=0&end=20500101&lmt=60&secid="
+	PanKouUrl       = "http://push2.eastmoney.com/api/qt/stock/get?fltt=2&fields=f58,f530,f135,f136,f137,f138,f139,f141,f142,f144,f145,f147,f148,f140,f143,f146,f149&secid="
+	TicksUrl        = "http://push2.eastmoney.com/api/qt/stock/details/get?fields1=f1&fields2=f51,f52,f53,f55"
+	MoneyFlowUrl    = "http://push2.eastmoney.com/api/qt/stock/fflow/kline/get?lmt=0&klt=1&fields1=f1&fields2=f53,f54,f55,f56&secid="
 )
 
-// jsoniter
-var json = jsoniter.ConfigCompatibleWithStandardLibrary
-var ctx = context.Background()
-
-// 访问热度
-var hotDB *redis.Client
-
-// 流量控制
-var limitDB *redis.Client
-
-// 列表详细数据
-var basicOpt = bson.M{
-	"cid": 1, "name": 1, "type": 1, "marketType": 1, "close": 1,
-	"price": 1, "pct_chg": 1, "amount": 1, "mc": 1, "tr": 1,
-	"net": 1, "main_net": 1, "roe": 1, "income_yoy": 1, "revenue_yoy": 1,
-}
-
-// 列表简略数据 (websocket更新时使用)
-var simpleOpt = bson.M{
-	"price": 1, "pct_chg": 1, "vol": 1, "amount": 1, "net": 1, "main_net": 1,
-}
-
-var searchOpt = bson.M{
-	"name": 1, "type": 1, "marketType": 1, "price": 1, "pct_chg": 1, "amount": 1,
-}
+var (
+	// jsoniter
+	json = jsoniter.ConfigCompatibleWithStandardLibrary
+	ctx  = context.Background()
+	// 文档
+	realColl *qmgo.Collection
+	// 访问热度
+	hotDB *redis.Client
+	// 流量控制
+	limitDB *redis.Client
+	// 列表详细数据
+	basicOpt = bson.M{
+		"cid": 1, "name": 1, "type": 1, "marketType": 1, "close": 1,
+		"price": 1, "pct_chg": 1, "amount": 1, "mc": 1, "tr": 1,
+		"net": 1, "main_net": 1, "roe": 1, "income_yoy": 1, "revenue_yoy": 1,
+	}
+	// 列表简略数据 (websocket更新时使用)
+	simpleOpt = bson.M{
+		"price": 1, "pct_chg": 1, "vol": 1, "amount": 1, "net": 1, "main_net": 1,
+	}
+	// 搜索
+	searchOpt = bson.M{
+		"name": 1, "type": 1, "marketType": 1, "price": 1, "pct_chg": 1, "amount": 1,
+	}
+)
 
 func init() {
+	client, err := qmgo.NewClient(ctx, &qmgo.Config{Uri: "mongodb://" + env.MongoHost})
+	if err != nil {
+		panic(err)
+	}
+	realColl = client.Database("stock").Collection("realStock")
+
 	hotDB = redis.NewClient(&redis.Options{
 		Addr: env.RedisHost,
 		DB:   1,
@@ -64,9 +70,10 @@ func init() {
 }
 
 // GetStock 获取单只股票
+// detail: 获取详细信息（所有板块）、市场状态
 func GetStock(code string, detail ...bool) bson.M {
 	var data bson.M
-	_ = download.RealColl.Find(ctx, bson.M{"_id": code}).Select(bson.M{"adj_factor": 0}).One(&data)
+	_ = realColl.Find(ctx, bson.M{"_id": code}).Select(bson.M{"adj_factor": 0}).One(&data)
 
 	if len(data) <= 0 {
 		return nil
@@ -77,7 +84,7 @@ func GetStock(code string, detail ...bool) bson.M {
 		if data["type"] == "stock" {
 			var bk []bson.M
 
-			_ = download.RealColl.Find(ctx, bson.M{
+			_ = realColl.Find(ctx, bson.M{
 				"_id": bson.M{"$in": data["bk"]},
 				// 排序是为了控制板块顺序，industry最先，concept在中间，area最后
 			}).Select(bson.M{"name": 1, "type": 1, "pct_chg": 1}).Sort("-type").All(&bk)
@@ -92,14 +99,15 @@ func GetStock(code string, detail ...bool) bson.M {
 }
 
 // GetStockList 获取多只股票信息
+// simple: 只获取简略信息
 func GetStockList(codes []string, simple ...bool) []bson.M {
 	results := make([]bson.M, 0)
 	data := make([]bson.M, 0)
 
 	if len(simple) > 0 {
-		_ = download.RealColl.Find(ctx, bson.M{"_id": bson.M{"$in": codes}}).Select(simpleOpt).All(&data)
+		_ = realColl.Find(ctx, bson.M{"_id": bson.M{"$in": codes}}).Select(simpleOpt).All(&data)
 	} else {
-		_ = download.RealColl.Find(ctx, bson.M{"_id": bson.M{"$in": codes}}).Select(basicOpt).All(&data)
+		_ = realColl.Find(ctx, bson.M{"_id": bson.M{"$in": codes}}).Select(basicOpt).All(&data)
 	}
 
 	// 排序
@@ -114,8 +122,8 @@ func GetStockList(codes []string, simple ...bool) []bson.M {
 	return results
 }
 
-// GetIndustryMinute 获取同花顺行业分时行情
-func GetIndustryMinute(code string) interface{} {
+// 获取同花顺行业分时行情
+func getIndustryMinute(code string) interface{} {
 	symbol := strings.Split(code, ".")[0]
 	body, err := common.GetThsAndRead("http://d.10jqka.com.cn/v6/time/bk_" + symbol + "/last.js")
 	if err != nil {
@@ -137,8 +145,8 @@ func GetIndustryMinute(code string) interface{} {
 	}
 }
 
-// AddSimpleMinute 添加简略分时行情
-func AddSimpleMinute(items bson.M) {
+// 添加简略分时行情
+func addSimpleMinute(items bson.M) {
 	cid, ok := items["cid"].(string)
 	if !ok {
 		getThsSimpleMinute(items)
@@ -167,6 +175,7 @@ func AddSimpleMinute(items bson.M) {
 	}
 }
 
+// 获取同花顺简略分时行情
 func getThsSimpleMinute(items bson.M) {
 	code := items["_id"].(string)
 	symbol := strings.Split(code, ".")
@@ -205,8 +214,8 @@ func getThsSimpleMinute(items bson.M) {
 	}
 }
 
-// Add60day 添加60日行情
-func Add60day(items bson.M) {
+// 添加60日行情
+func add60day(items bson.M) {
 	body, err := common.GetAndRead(Day60Url + items["cid"].(string))
 	if err != nil {
 		return
@@ -221,8 +230,8 @@ func Add60day(items bson.M) {
 	}
 }
 
-// AddMainFlow 添加主力资金趋势
-func AddMainFlow(items bson.M) {
+// 添加主力资金趋势
+func addMainFlow(items bson.M) {
 	url := "http://push2.eastmoney.com/api/qt/stock/fflow/kline/get?lmt=0&klt=1&fields1=f1&fields2=f52&secid="
 	cid, ok := items["cid"].(string)
 	if !ok {
@@ -251,7 +260,7 @@ func AddMainFlow(items bson.M) {
 	}
 }
 
-// Search 搜索股票
+// 搜索股票
 func search(input string) []bson.M {
 	var results []bson.M
 
@@ -263,7 +272,7 @@ func search(input string) []bson.M {
 	for _, marketType := range []string{"CN", "HK", "US"} {
 		var temp []bson.M
 
-		_ = download.RealColl.Find(ctx, bson.M{
+		_ = realColl.Find(ctx, bson.M{
 			"marketType": marketType, "type": "stock", "$or": bson.A{
 				// 正则匹配 不区分大小写
 				bson.M{"_id": bson.M{"$regex": matchStr, "$options": "i"}},
@@ -279,7 +288,7 @@ func search(input string) []bson.M {
 
 	// 指数
 	var temp []bson.M
-	_ = download.RealColl.Find(ctx, bson.M{
+	_ = realColl.Find(ctx, bson.M{
 		"type": bson.M{"$ne": "stock"}, "$or": bson.A{
 			// 正则匹配 不区分大小写
 			bson.M{"_id": bson.M{"$regex": matchStr, "$options": "i"}},
@@ -294,7 +303,7 @@ func search(input string) []bson.M {
 	return results
 }
 
-// getRank 市场排行
+// 市场排行
 func getRank(opt *common.RankOpt) []bson.M {
 	var results []bson.M
 
@@ -308,9 +317,8 @@ func getRank(opt *common.RankOpt) []bson.M {
 		opt.SortName = "-" + opt.SortName
 	}
 
-	_ = download.RealColl.Find(ctx, bson.M{
-		"marketType": opt.MarketType, "type": "stock",
-		"vol": bson.M{"$gt": 0}, "mc": bson.M{"$gt": 0},
+	_ = realColl.Find(ctx, bson.M{
+		"marketType": opt.MarketType, "type": "stock", "mc": bson.M{"$gt": 0},
 	}).Sort(opt.SortName).Select(rankOpt).Skip(20 * (opt.Page - 1)).Limit(20).All(&results)
 
 	return results
@@ -367,7 +375,7 @@ func GetRealTicks(item bson.M) (bson.M, []map[string]interface{}) {
 	return pankou, ticks
 }
 
-// getNumbers 获取涨跌分布
+// 获取市场涨跌分布
 func getNumbers(marketType string) bson.M {
 	label := []string{"跌停", "<7", "7-5", "5-3", "3-0", "0", "0-3", "3-5", "5-7", ">7", "涨停"}
 	num := make([]int64, 11)
@@ -394,14 +402,14 @@ func getNumbers(marketType string) bson.M {
 	for i := range match {
 		match[i]["marketType"] = marketType
 		match[i]["type"] = "stock"
-		num[i], _ = download.RealColl.Find(ctx, match[i]).Count()
+		num[i], _ = realColl.Find(ctx, match[i]).Count()
 	}
 
 	return bson.M{"label": label, "value": num}
 }
 
-// GetDetailMoneyFlow 获取资金博弈走势
-func GetDetailMoneyFlow(code string) interface{} {
+// 获取资金博弈走势
+func getDetailMoneyFlow(code string) interface{} {
 	item := GetStock(code, false)
 	cid, ok := item["cid"].(string)
 	if !ok {
@@ -428,15 +436,15 @@ func GetDetailMoneyFlow(code string) interface{} {
 	}
 }
 
-// GetIndustryMembers 获取板块成分股
-func GetIndustryMembers(industryCode string) []bson.M {
+// 获取板块成分股
+func getIndustryMembers(code string) []bson.M {
 	var members bson.M
 	var data []bson.M
 	// 获取成分股列表
-	_ = download.RealColl.Find(ctx, bson.M{"_id": industryCode}).Select(bson.M{"members": 1}).One(&members)
+	_ = realColl.Find(ctx, bson.M{"_id": code}).Select(bson.M{"members": 1}).One(&members)
 	// 获取行情
-	_ = download.RealColl.Find(ctx, bson.M{"_id": bson.M{"$in": members["members"]}}).
-		Sort("-pct_chg").Limit(20).Select(basicOpt).All(&data)
+	_ = realColl.Find(ctx, bson.M{"_id": bson.M{"$in": members["members"]}}).
+		Sort("-pct_chg").Limit(25).Select(basicOpt).All(&data)
 
 	return data
 }
@@ -450,13 +458,12 @@ func viewPage(code string) interface{} {
 	return res
 }
 
-// GetSimpleBK 获取市场板块简略信息（已排序）
-func GetSimpleBK(idsName string) []bson.M {
+// 获取市场板块简略信息
+func getSimpleBK(idsName string) []bson.M {
 	// sync Map
 	results := sync.Map{}
 
-	query := download.RealColl.Find(ctx, bson.M{"type": idsName}).
-		Select(bson.M{"name": 1, "pct_chg": 1, "领涨股": 1, "max_pct": 1, "main_net": 1})
+	query := realColl.Find(ctx, bson.M{"type": idsName}).Select(bson.M{"name": 1, "pct_chg": 1, "领涨股": 1, "max_pct": 1, "main_net": 1})
 
 	myFunc := func(sortName string, limit int64) {
 		var temp []bson.M
@@ -477,4 +484,11 @@ func GetSimpleBK(idsName string) []bson.M {
 		return true
 	})
 	return data
+}
+
+// 获取热门股票数据（来源：雪球）
+func getXueQiuHotStock() {
+	// type: 全球10 沪深12 港股13 美股11
+	body, err := common.GetAndRead("http://stock.xueqiu.com/v5/stock/hot_stock/list.json?size=100&type=10")
+	fmt.Println(body, err)
 }
