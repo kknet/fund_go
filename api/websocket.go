@@ -74,47 +74,46 @@ func ConnectItems(c *gin.Context) {
 }
 
 // SendCList 推送消息
-func SendCList(conn *StockListConn) {
-	// 获取新数据
-	newData := real.GetStockList(conn.codes, true)
+func SendCList(c *StockListConn) {
+	newData := real.GetStockList(c.codes, true)
 
 	for i := range newData {
-		if newData[i]["pct_chg"] != conn.data[i]["pct_chg"] {
-			conn.data[i] = newData[i]
-
-			// 写入
-			err := conn.Conn.Conn.WriteJSON(newData[i])
+		if newData[i]["pct_chg"] != c.data[i]["pct_chg"] {
+			// 更新
+			err := c.Conn.Conn.WriteJSON(newData[i])
+			// 更新错误
 			if err != nil {
-				delete(listMap, conn.Id)
+				delete(listMap, c.Id)
 			}
 		}
 	}
+	c.data = newData
 }
 
 // SendItems 推送详情页
-func SendItems(conn *StockDetailConn) {
+func SendItems(c *StockDetailConn) {
 	var err error
-	// 获取新数据
-	newData := real.GetStock(conn.code, true)
+
+	newData := real.GetStock(c.code, true)
 	// 有更新
-	if newData["vol"] != conn.data["vol"] {
-		conn.data = newData
+	if newData["vol"] != c.data["vol"] {
+		c.data = newData
 
 		// 详情信息
 		if newData["type"] == "stock" {
 			pankou, ticks := real.GetRealTicks(newData)
 
-			err = conn.Conn.Conn.WriteJSON(bson.M{
+			err = c.Conn.Conn.WriteJSON(bson.M{
 				"items": newData, "ticks": ticks, "pankou": pankou,
 			})
 		} else {
-			err = conn.Conn.Conn.WriteJSON(bson.M{
+			err = c.Conn.Conn.WriteJSON(bson.M{
 				"items": newData,
 			})
 		}
 
 		if err != nil {
-			delete(detailMap, conn.Id)
+			delete(detailMap, c.Id)
 		}
 	}
 }
