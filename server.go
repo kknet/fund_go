@@ -32,6 +32,7 @@ func main() {
 
 	// WebSocket
 	wsStock := ws.Group("/stock")
+	wsStock.Use(real.CheckCodeFunc)
 	wsStock.GET("/list", api.ConnectCList)
 	wsStock.GET("/detail", api.ConnectItems)
 
@@ -53,7 +54,7 @@ func main() {
 
 	// Fina 财务数据
 	Fina := apiV1.Group("/fina")
-	Fina.GET("/get", fina.GetFina)
+	Fina.GET("/get", real.CheckCodeFunc, fina.GetFina)
 	Fina.GET("/filter", fina.Filter)
 
 	// User 用户

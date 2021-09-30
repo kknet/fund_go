@@ -2,7 +2,6 @@ package fina
 
 import (
 	"fund_go2/env"
-	"go.mongodb.org/mongo-driver/bson"
 	"xorm.io/xorm"
 )
 
@@ -11,7 +10,7 @@ var finaDB *xorm.Engine
 func init() {
 	var err error
 
-	connStr := "postgres://postgres:123456@" + env.PostgresHost + ":5432/fina?sslmode=disable"
+	connStr := "postgres://postgres:123456@" + env.PostgresHost + "/fund?sslmode=disable"
 	finaDB, err = xorm.NewEngine("postgres", connStr)
 	if err != nil {
 		panic(err)
@@ -19,8 +18,7 @@ func init() {
 }
 
 // GetFinaData 获取股票财务数据
-func GetFinaData(code string, period string) bson.M {
-	data := make([]map[string]string, 0)
+func GetFinaData(code string, period string) interface{} {
 
 	var endDate string
 	switch period {
@@ -33,20 +31,13 @@ func GetFinaData(code string, period string) bson.M {
 	case "4q", "y":
 		endDate = "1231"
 	}
-	// 添加每时期数据
-	for _, year := range []string{"2016", "2017", "2018", "2019", "2020", "2021"} {
-		temp, _ := finaDB.Table(year+endDate).Where("ts_code = ?", code).QueryString()
-		if len(temp) >= 1 {
-			info := temp[0]
-			info["date"] = year + endDate
-			data = append(data, info)
-		}
-	}
-	// 添加agg复合数据
-	agg, _ := finaDB.Table("agg").Where("ts_code = ?", code).QueryString()
-	return bson.M{
-		"data": data, "agg": agg[0],
-	}
+
+	data, _ := finaDB.Table("fina").
+		Where("ts_code=?", code).
+		Where("trade_date like ?", "%"+endDate).
+		OrderBy("trade_date").
+		QueryString()
+	return data
 }
 
 // FilterStock 指标选股

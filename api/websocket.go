@@ -1,7 +1,6 @@
 package apiV1
 
 import (
-	"context"
 	"fund_go2/api/real"
 	"fund_go2/download"
 	"github.com/gin-gonic/gin"
@@ -11,7 +10,6 @@ import (
 	"strings"
 )
 
-// 升级协议
 var upGrader = websocket.Upgrader{
 	CheckOrigin: func(r *http.Request) bool {
 		return true
@@ -37,20 +35,16 @@ func ConnectCList(c *gin.Context) {
 	if err != nil {
 		return
 	}
+
 	// 获取参数
-	code, ok := c.GetQuery("code")
-	if !ok {
-		_ = ws.WriteJSON(bson.M{"msg": "必须指定code参数", "status": false})
-		return
-	}
-	codes := strings.Split(code, ",")
+	codes := strings.Split(c.Query("code"), ",")
 
 	conn := &StockListConn{
 		Conn:  newConn(ws),
 		codes: codes,
 		data:  real.GetStockList(codes),
 	}
-	StockListConnList = append(StockListConnList, conn)
+	listMap[conn.Conn.Id] = conn
 }
 
 // ConnectItems 详情页连接
@@ -59,67 +53,68 @@ func ConnectItems(c *gin.Context) {
 	if err != nil {
 		return
 	}
-	// 获取参数
-	code, ok := c.GetQuery("code")
-	if !ok {
-		_ = ws.WriteJSON(bson.M{"msg": "必须指定code参数", "status": false})
-		return
-	}
+
+	code := c.Query("code")
 	// 检查代码合法
-	check := real.GetStock(code)
+	check := real.GetStock(code, true)
 	if len(check) > 0 {
 		conn := &StockDetailConn{
 			Conn: newConn(ws),
 			code: code,
 			data: check,
 		}
-		StockDetailConnList = append(StockDetailConnList, conn)
+		// 写入
+		err = conn.Conn.Conn.WriteJSON(bson.M{
+			"items": check,
+		})
+		detailMap[conn.Conn.Id] = conn
 	} else {
 		_ = ws.WriteJSON(bson.M{"msg": "代码不存在", "status": false})
 	}
 }
 
 // SendCList 推送消息
-func SendCList() {
-	for _, c := range StockListConnList {
-		var newData []bson.M
-		// 获取新数据
-		_ = download.RealColl.Find(context.Background(), bson.M{"_id": bson.M{"$in": c.codes}}).Select(bson.M{
-			"price": 1, "pct_chg": 1, "vol": 1, "amount": 1, "net": 1, "main_net": 1,
-		}).All(&newData)
+func SendCList(conn *StockListConn) {
+	// 获取新数据
+	newData := real.GetStockList(conn.codes, true)
 
-		for i := range newData {
-			if newData[i]["pct_chg"] != c.data[i]["pct_chg"] {
-				c.data[i] = newData[i]
+	for i := range newData {
+		if newData[i]["pct_chg"] != conn.data[i]["pct_chg"] {
+			conn.data[i] = newData[i]
 
-				// 写入
-				err := c.Conn.Conn.WriteJSON(newData[i])
-				if err != nil {
-					c.Conn.deleteConn()
-				}
+			// 写入
+			err := conn.Conn.Conn.WriteJSON(newData[i])
+			if err != nil {
+				delete(listMap, conn.Id)
 			}
 		}
 	}
 }
 
 // SendItems 推送详情页
-func SendItems() {
-	for _, c := range StockDetailConnList {
-		// 获取新数据
-		newData := real.GetStock(c.code, true)
-		// 有更新
-		if newData["vol"] != c.data["vol"] {
-			// 详情
-			pankou, ticks := real.GetRealTicks(newData)
-			c.data = newData
+func SendItems(conn *StockDetailConn) {
+	var err error
+	// 获取新数据
+	newData := real.GetStock(conn.code, true)
+	// 有更新
+	if newData["vol"] != conn.data["vol"] {
+		conn.data = newData
 
-			// 写入
-			err := c.Conn.Conn.WriteJSON(bson.M{
+		// 详情信息
+		if newData["type"] == "stock" {
+			pankou, ticks := real.GetRealTicks(newData)
+
+			err = conn.Conn.Conn.WriteJSON(bson.M{
 				"items": newData, "ticks": ticks, "pankou": pankou,
 			})
-			if err != nil {
-				c.Conn.deleteConn()
-			}
+		} else {
+			err = conn.Conn.Conn.WriteJSON(bson.M{
+				"items": newData,
+			})
+		}
+
+		if err != nil {
+			delete(detailMap, conn.Id)
 		}
 	}
 }
@@ -128,7 +123,14 @@ func SendItems() {
 func ListenChan() {
 	for {
 		<-download.MyChan
-		SendItems()
-		SendCList()
+		// 相同code的连接可以同时更新
+		for _, c := range detailMap {
+			SendItems(c)
+		}
+
+		// 对每个连接单独更新
+		for _, c := range listMap {
+			SendCList(c)
+		}
 	}
 }

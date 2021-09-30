@@ -22,14 +22,10 @@ const (
 )
 
 // Status 市场状态：是否开市
-var Status = map[string]bool{
-	"CN": false, "HK": false, "US": false,
-}
+var Status = sync.Map{}
 
 // StatusName 市场状态描述：盘前交易、交易中、休市中、已收盘、休市
-var StatusName = map[string]string{
-	"CN": "", "HK": "", "US": "",
-}
+var StatusName = sync.Map{}
 
 // 市场参数
 var fs = map[string]string{
@@ -198,20 +194,20 @@ func getRealStock(marketType string) {
 		updateMongo(df.Maps())
 
 		// 更新行业数据
-		if count%10 == 0 {
-			if marketType == "CN" {
-				go calIndustry()
-			}
+		if count%10 == 0 && marketType == "CN" {
+			go calIndustry()
 		}
+
+		// 更新计数器
 		count++
 		MyChan <- marketType
-
 		// 重置计数器
 		if count > MaxCount {
 			count = 0
 		}
 
-		for !Status[marketType[0:2]] {
+		status, _ := Status.Load(marketType[0:2])
+		for !status.(bool) {
 			count = MaxCount
 			time.Sleep(time.Millisecond * 300)
 		}
@@ -238,9 +234,8 @@ func getMarketStatus() {
 			// 状态名称
 			statusName := items.Get(i, "market", "status").ToString()
 			// 状态
-			Status[market] = Expression(statusName == "交易中", true, false).(bool)
-
-			StatusName[market] = statusName
+			Status.Store(market, Expression(statusName == "交易中", true, false))
+			StatusName.Store(market, statusName)
 		}
 		time.Sleep(time.Second * 3)
 	}

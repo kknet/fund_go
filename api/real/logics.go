@@ -36,11 +36,16 @@ var hotDB *redis.Client
 // 流量控制
 var limitDB *redis.Client
 
-// query options
+// 列表详细数据
 var basicOpt = bson.M{
 	"cid": 1, "name": 1, "type": 1, "marketType": 1, "close": 1,
 	"price": 1, "pct_chg": 1, "amount": 1, "mc": 1, "tr": 1,
 	"net": 1, "main_net": 1, "roe": 1, "income_yoy": 1, "revenue_yoy": 1,
+}
+
+// 列表简略数据 (websocket更新时使用)
+var simpleOpt = bson.M{
+	"price": 1, "pct_chg": 1, "vol": 1, "amount": 1, "net": 1, "main_net": 1,
 }
 
 var searchOpt = bson.M{
@@ -68,28 +73,34 @@ func GetStock(code string, detail ...bool) bson.M {
 	}
 
 	if len(detail) > 0 {
-		var bk []bson.M
+		// 股票板块
+		if data["type"] == "stock" {
+			var bk []bson.M
 
-		_ = download.RealColl.Find(ctx, bson.M{
-			"_id": bson.M{"$in": data["bk"]},
-			// 排序是为了控制板块顺序，industry最先，concept在中间，area最后
-		}).Select(bson.M{"name": 1, "type": 1, "pct_chg": 1}).Sort("-type").All(&bk)
-		data["bk"] = bk
-
+			_ = download.RealColl.Find(ctx, bson.M{
+				"_id": bson.M{"$in": data["bk"]},
+				// 排序是为了控制板块顺序，industry最先，concept在中间，area最后
+			}).Select(bson.M{"name": 1, "type": 1, "pct_chg": 1}).Sort("-type").All(&bk)
+			data["bk"] = bk
+		}
 		// 添加市场状态
 		marketType := data["marketType"].(string)
-		data["status"] = download.Status[marketType]
-		data["status_name"] = download.StatusName[marketType]
+		data["status"], _ = download.Status.Load(marketType)
+		data["status_name"], _ = download.StatusName.Load(marketType)
 	}
 	return data
 }
 
 // GetStockList 获取多只股票信息
-func GetStockList(codes []string) []bson.M {
+func GetStockList(codes []string, simple ...bool) []bson.M {
 	results := make([]bson.M, 0)
 	data := make([]bson.M, 0)
 
-	_ = download.RealColl.Find(ctx, bson.M{"_id": bson.M{"$in": codes}}).Select(basicOpt).All(&data)
+	if len(simple) > 0 {
+		_ = download.RealColl.Find(ctx, bson.M{"_id": bson.M{"$in": codes}}).Select(simpleOpt).All(&data)
+	} else {
+		_ = download.RealColl.Find(ctx, bson.M{"_id": bson.M{"$in": codes}}).Select(basicOpt).All(&data)
+	}
 
 	// 排序
 	for _, c := range codes {

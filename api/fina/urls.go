@@ -5,13 +5,7 @@ import (
 )
 
 func GetFina(c *gin.Context) {
-	code, ok := c.GetQuery("code")
-	if !ok {
-		c.JSON(200, gin.H{
-			"status": false, "msg": "未指定code参数",
-		})
-		return
-	}
+	code := c.Query("code")
 	period := c.DefaultQuery("period", "y")
 	data := GetFinaData(code, period)
 	c.JSON(200, gin.H{
