@@ -24,10 +24,14 @@ var (
 	MyChan chan string
 
 	// Status 市场状态：是否开市
-	Status = sync.Map{}
+	Status = map[string]bool{
+		"CN": false, "HK": false, "US": false,
+	}
 
 	// StatusName 市场状态描述：盘前交易、交易中、休市中、已收盘、休市
-	StatusName = sync.Map{}
+	StatusName = map[string]string{
+		"CN": "", "HK": "", "US": "",
+	}
 
 	// 市场参数
 	fs = map[string]string{
@@ -61,14 +65,6 @@ func init() {
 	chanOnceManager.Do(func() {
 		MyChan = make(chan string)
 	})
-
-	// map
-	Status.Store("CN", false)
-	Status.Store("HK", false)
-	Status.Store("US", false)
-	StatusName.Store("CN", "")
-	StatusName.Store("HK", "")
-	StatusName.Store("US", "")
 }
 
 // 计算股票指标
@@ -212,8 +208,7 @@ func getRealStock(marketType string) {
 			count = 0
 		}
 
-		status, _ := Status.Load(marketType[0:2])
-		for !status.(bool) {
+		for !Status[marketType[0:2]] {
 			count = MaxCount
 			time.Sleep(time.Millisecond * 300)
 		}
@@ -240,8 +235,8 @@ func getMarketStatus() {
 			// 状态名称
 			statusName := items.Get(i, "market", "status").ToString()
 			// 状态
-			Status.Store(market, Expression(statusName == "交易中", true, false))
-			StatusName.Store(market, statusName)
+			Status[market] = Expression(statusName == "交易中", true, false).(bool)
+			StatusName[market] = statusName
 		}
 		time.Sleep(time.Second * 3)
 	}

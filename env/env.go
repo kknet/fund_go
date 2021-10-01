@@ -1,8 +1,7 @@
 package env
 
 // 部署环境
-// 1. 通过 container_name:port 方式访问其他容器
-// 2. 容器内访问宿主机 host.docker.internal
+// 通过 container_name:port 方式访问其他容器
 const (
 	RedisHost    = "fund_redis:6379"
 	MongoHost    = "fund_mongo:27017"

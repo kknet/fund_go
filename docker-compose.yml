@@ -1,4 +1,4 @@
-version: '3.9'
+version: '3'
 services:
   pg:
     image: postgres  # 基础镜像

@@ -19,7 +19,7 @@ func init() {
 }
 
 func main() {
-	//gin.SetMode(gin.ReleaseMode)
+	gin.SetMode(gin.ReleaseMode)
 
 	// 创建实例
 	r := gin.Default()
@@ -65,11 +65,6 @@ func main() {
 	User.PUT("/info", user.Authorize, user.UpdateInfo)
 	User.POST("/token", user.Login)
 	User.DELETE("/token", user.Authorize, user.Logout)
-
-	// 首页
-	r.GET("/", func(c *gin.Context) {
-		c.String(http.StatusOK, "Hello World!")
-	})
 
 	// 错误处理
 	r.NoRoute(func(c *gin.Context) {

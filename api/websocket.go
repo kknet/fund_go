@@ -74,7 +74,7 @@ func ConnectItems(c *gin.Context) {
 }
 
 // SendCList 推送消息
-func SendCList(c *StockListConn) {
+func (c *StockListConn) SendCList() {
 	newData := real.GetStockList(c.codes, true)
 
 	for i := range newData {
@@ -91,7 +91,7 @@ func SendCList(c *StockListConn) {
 }
 
 // SendItems 推送详情页
-func SendItems(c *StockDetailConn) {
+func (c *StockDetailConn) SendItems() {
 	var err error
 
 	newData := real.GetStock(c.code, true)
@@ -124,12 +124,12 @@ func ListenChan() {
 		<-download.MyChan
 		// 相同code的连接可以同时更新
 		for _, c := range detailMap {
-			SendItems(c)
+			c.SendItems()
 		}
 
 		// 对每个连接单独更新
 		for _, c := range listMap {
-			SendCList(c)
+			c.SendCList()
 		}
 	}
 }

@@ -92,8 +92,8 @@ func GetStock(code string, detail ...bool) bson.M {
 		}
 		// 添加市场状态
 		marketType := data["marketType"].(string)
-		data["status"], _ = download.Status.Load(marketType)
-		data["status_name"], _ = download.StatusName.Load(marketType)
+		data["status"], _ = download.Status[marketType]
+		data["status_name"], _ = download.StatusName[marketType]
 	}
 	return data
 }

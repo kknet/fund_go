@@ -9,7 +9,6 @@ var finaDB *xorm.Engine
 
 func init() {
 	var err error
-
 	connStr := "postgres://postgres:123456@" + env.PostgresHost + "/fund?sslmode=disable"
 	finaDB, err = xorm.NewEngine("postgres", connStr)
 	if err != nil {
