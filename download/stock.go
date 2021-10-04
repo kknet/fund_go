@@ -5,6 +5,7 @@ import (
 	"github.com/go-gota/gota/dataframe"
 	"github.com/go-gota/gota/series"
 	jsoniter "github.com/json-iterator/go"
+	"go.mongodb.org/mongo-driver/bson"
 	"gonum.org/v1/gonum/mat"
 	"log"
 	"strings"
@@ -18,19 +19,20 @@ const (
 	MidCount = 10
 )
 
+type marketStruct struct {
+	Status     bool
+	StatusName string
+}
+
 var (
 	json = jsoniter.ConfigCompatibleWithStandardLibrary
+
 	// MyChan 全局通道
 	MyChan chan string
 
-	// Status 市场状态：是否开市
-	Status = map[string]bool{
-		"CN": false, "HK": false, "US": false,
-	}
-
-	// StatusName 市场状态描述：盘前交易、交易中、休市中、已收盘、休市
-	StatusName = map[string]string{
-		"CN": "", "HK": "", "US": "",
+	// MarketStatus 市场状态
+	MarketStatus = map[string]*marketStruct{
+		"CN": {}, "HK": {}, "US": {},
 	}
 
 	// 市场参数
@@ -153,8 +155,8 @@ func Cal(s1 series.Series, operation string, s2 series.Series, name ...string) s
 }
 
 // 下载股票数据
-func getRealStock(marketType string) {
-	url := "http://push2.eastmoney.com/api/qt/clist/get?po=1&fid=f6&pz=4600&np=1&fltt=2&pn=1&fs=" + fs[marketType] + "&fields="
+func getRealStock(market string) {
+	url := "http://push2.eastmoney.com/api/qt/clist/get?po=1&fid=f6&pz=4600&np=1&fltt=2&pn=1&fs=" + fs[market] + "&fields="
 	var tempUrl string
 	// 定时更新计数器
 	var count = MaxCount
@@ -192,23 +194,23 @@ func getRealStock(marketType string) {
 			df = df.Rename(newName, col)
 		}
 
-		df = calData(df, marketType)
+		df = calData(df, market)
 		updateMongo(df.Maps())
 
 		// 更新行业数据
-		if count%10 == 0 && marketType == "CN" {
+		if count%10 == 0 && market == "CN" {
 			go calIndustry()
 		}
 
 		// 更新计数器
 		count++
-		MyChan <- marketType
+		MyChan <- market
 		// 重置计数器
 		if count > MaxCount {
 			count = 0
 		}
 
-		for !Status[marketType[0:2]] {
+		for !MarketStatus[market[0:2]].Status {
 			count = MaxCount
 			time.Sleep(time.Millisecond * 300)
 		}
@@ -234,9 +236,17 @@ func getMarketStatus() {
 			market := items.Get(i, "market", "region").ToString()
 			// 状态名称
 			statusName := items.Get(i, "market", "status").ToString()
-			// 状态
-			Status[market] = Expression(statusName == "交易中", true, false).(bool)
-			StatusName[market] = statusName
+			// 时间戳
+			timestamp := items.Get(i, "quote", "timestamp").ToInt64()
+
+			MarketStatus[market] = &marketStruct{
+				Status:     Expression(statusName == "交易中", true, false).(bool), // 状态
+				StatusName: statusName,                                          // 状态名称
+			}
+			// 更新本地最新交易日期
+			times := time.Unix(timestamp/1000, 0)
+			timeString := times.Format("2006-01-02")
+			_, err = realColl.UpdateAll(ctx, bson.M{"marketType": market}, bson.M{"$set": bson.M{"trade_date": timeString}})
 		}
 		time.Sleep(time.Second * 3)
 	}

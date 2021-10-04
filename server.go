@@ -19,7 +19,7 @@ func init() {
 }
 
 func main() {
-	gin.SetMode(gin.ReleaseMode)
+	//gin.SetMode(gin.ReleaseMode)
 
 	// 创建实例
 	r := gin.Default()

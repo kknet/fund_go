@@ -91,9 +91,9 @@ func GetStock(code string, detail ...bool) bson.M {
 			data["bk"] = bk
 		}
 		// 添加市场状态
-		marketType := data["marketType"].(string)
-		data["status"], _ = download.Status[marketType]
-		data["status_name"], _ = download.StatusName[marketType]
+		market := data["marketType"].(string)
+		data["status"] = download.MarketStatus[market].Status
+		data["status_name"] = download.MarketStatus[market].StatusName
 	}
 	return data
 }
@@ -157,21 +157,20 @@ func addSimpleMinute(items bson.M) {
 		return
 	}
 
-	var info []string
 	data := json.Get(body, "data")
 	total := data.Get("trendsTotal").ToInt()
-	data.Get("trends").ToVal(&info)
+	data = data.Get("trends")
 
 	results := make([]float64, 0)
 
-	for i := 0; i < len(info); i += 3 {
-		item := strings.Split(info[i], ",")
+	for i := 0; i < data.Size(); i += 5 {
+		item := strings.Split(data.Get(i).ToString(), ",")
 		data, _ := strconv.ParseFloat(item[1], 8)
 		results = append(results, data)
 	}
 
 	items["chart"] = bson.M{
-		"total": total / 3, "price": results, "close": items["close"], "type": "price",
+		"total": total / 5, "price": results, "close": items["close"], "type": "price",
 	}
 }
 
@@ -200,17 +199,15 @@ func getThsSimpleMinute(items bson.M) {
 
 	info := strings.Split(source, ";")
 
-	// 间隔
-	space := 3
 	results := make([]float64, 0)
 
-	for i := 0; i < len(info); i += space {
+	for i := 0; i < len(info); i += 5 {
 		item := strings.Split(info[i], ",")
 		data, _ := strconv.ParseFloat(item[1], 8)
 		results = append(results, data)
 	}
 	items["chart"] = bson.M{
-		"total": total / space, "price": results, "close": preClose, "type": "price",
+		"total": total / 5, "price": results, "close": preClose, "type": "price",
 	}
 }
 
@@ -265,41 +262,43 @@ func search(input string) []bson.M {
 	var results []bson.M
 
 	// 模糊查询
-	char := strings.Split(input, "")
-	matchStr := strings.Join(char, ".*")
-
-	// 先搜索股票
-	for _, marketType := range []string{"CN", "HK", "US"} {
-		var temp []bson.M
-
-		_ = realColl.Find(ctx, bson.M{
-			"marketType": marketType, "type": "stock", "$or": bson.A{
-				// 正则匹配 不区分大小写
-				bson.M{"_id": bson.M{"$regex": matchStr, "$options": "i"}},
-				bson.M{"name": bson.M{"$regex": matchStr, "$options": "i"}},
-			},
-		}).Sort("-amount").Select(searchOpt).Limit(10).All(&temp)
-		results = append(results, temp...)
-
-		if len(results) >= 10 {
-			return results[0:10]
-		}
+	matchStr := strings.Replace(input, "", ".*", -1)
+	matchOpt := bson.A{
+		// 正则匹配 不区分大小写
+		bson.M{"_id": bson.M{"$regex": matchStr, "$options": "i"}},
+		bson.M{"name": bson.M{"$regex": matchStr, "$options": "i"}},
 	}
 
-	// 指数
-	var temp []bson.M
+	// 优先级1: 板块(area,concept,industry)
+	temp := make([]bson.M, 0)
 	_ = realColl.Find(ctx, bson.M{
-		"type": bson.M{"$ne": "stock"}, "$or": bson.A{
-			// 正则匹配 不区分大小写
-			bson.M{"_id": bson.M{"$regex": matchStr, "$options": "i"}},
-			bson.M{"name": bson.M{"$regex": matchStr, "$options": "i"}},
-		},
-	}).Sort("-amount").Select(searchOpt).Limit(10).All(&temp)
-	results = append(results, temp...)
+		// 只支持名字搜索
+		"name": bson.M{"$regex": matchStr, "$options": "i"},
 
-	if len(results) >= 10 {
-		return results[0:10]
+		"type": bson.M{"$in": bson.A{"industry", "area", "concept"}},
+	}).Select(searchOpt).Limit(12).All(&temp)
+
+	results = append(results, temp...)
+	if len(results) >= 12 {
+		return results
 	}
+
+	// 优先级2: stock(CN > HK > US)
+	temp = []bson.M{}
+	_ = realColl.Find(ctx, bson.M{
+		"$or": matchOpt, "type": "stock",
+	}).Select(searchOpt).Sort("marketType").Sort("-amount").Limit(12).All(&temp)
+
+	results = append(results, temp...)
+	if len(results) >= 12 {
+		return results
+	}
+
+	// 优先级3: index
+	temp = []bson.M{}
+	_ = realColl.Find(ctx, bson.M{"$or": matchOpt, "type": "index"}).Select(searchOpt).Limit(12).All(&temp)
+
+	results = append(results, temp...)
 	return results
 }
 
@@ -308,7 +307,7 @@ func getRank(opt *common.RankOpt) []bson.M {
 	var results []bson.M
 
 	var rankOpt = bson.M{
-		"cid": 1, "name": 1, "type": 1, "close": 1, "price": 1, "pct_chg": 1,
+		"cid": 1, "name": 1, "marketType": 1, "type": 1, "close": 1, "price": 1, "pct_chg": 1,
 	}
 
 	// 添加指定参数
