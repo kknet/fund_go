@@ -43,6 +43,8 @@ services:
     command: python server.py  # 运行容器时运行命令
     ports:
       - "5000:5000"
+    volumes:
+      - kline-data:/code/common/kline
     links:
       - pg
       - mongo
@@ -54,3 +56,4 @@ volumes: # 数据卷
   pg-data:
   mongo-data:
   redis-data:
+  kline-data:

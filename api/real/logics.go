@@ -135,12 +135,11 @@ func getIndustryMinute(code string) interface{} {
 
 	info := json.Get([]byte(str), "bk_"+symbol, "data").ToString()
 	info = strings.Join(strings.Split(info, ";"), "\n")
-	df := dataframe.ReadCSV(strings.NewReader("time,price,amount,avg,vol\n" + info))
+	df := dataframe.ReadCSV(strings.NewReader("time,price,amount,vol\n" + info))
 
 	return bson.M{
 		"price":  df.Col("price").Float(),
 		"vol":    df.Col("vol").Float(),
-		"avg":    df.Col("avg").Float(),
 		"amount": df.Col("amount").Float(),
 	}
 }
